@@ -1,4 +1,5 @@
-# SE_Project
+# Tournament Management System
 
-## Deliverable 1:
-https://docs.google.com/document/d/18iWIosOhTW8Ana5bvoOXtuDYIvphv8rfPskqJX5CLoQ/edit?usp=sharing
+[Documentation](https://docs.google.com/document/d/1Qx__OkRg7evKsOOCRNYQDwhzLkV-yNLhwdppng2qStM/edit?usp=sharing)
+
+[Burndown Chart](https://docs.google.com/spreadsheets/d/1ODVDwXn5SHQxNcReNVhjKWMuuB3rYFWhgCAE4t7E8sU/edit?usp=sharing)
