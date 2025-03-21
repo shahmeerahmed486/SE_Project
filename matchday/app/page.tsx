@@ -5,33 +5,6 @@ import { Trophy, Calendar, Users, Shield, ArrowRight } from "lucide-react"
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="border-b">
-        <div className="container flex h-16 items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">Matchday</span>
-          </div>
-          <nav className="hidden md:flex gap-6">
-            <Link href="/" className="text-sm font-medium hover:underline underline-offset-4">
-              Home
-            </Link>
-            <Link href="/tournaments" className="text-sm font-medium hover:underline underline-offset-4">
-              Tournaments
-            </Link>
-            <Link href="/teams" className="text-sm font-medium hover:underline underline-offset-4">
-              Teams
-            </Link>
-            <Link href="/register" className="text-sm font-medium hover:underline underline-offset-4">
-              Register
-            </Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/login">
-              <Button variant="outline">Login</Button>
-            </Link>
-          </div>
-        </div>
-      </header>
       <main className="flex-1">
         <section className="w-full py-12 md:py-24 lg:py-32 bg-muted">
           <div className="container px-4 md:px-6">

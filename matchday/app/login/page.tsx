@@ -5,8 +5,6 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { auth } from "@/lib/firebase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,19 +24,10 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // For demo purposes, allow any email/password combination
-      if (process.env.NODE_ENV === "development" || !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
-        // Simulate successful login for demo
-        toast({
-          title: "Demo login successful",
-          description: "You have been logged in with demo credentials.",
-        })
-        router.push("/admin/dashboard")
-        return
-      }
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
-      // Actual Firebase authentication
-      await signInWithEmailAndPassword(auth, email, password)
+      // For demo purposes, allow any email/password combination
       toast({
         title: "Login successful",
         description: "You have been logged in successfully.",
@@ -48,7 +37,7 @@ export default function LoginPage() {
       console.error("Login error:", error)
       toast({
         title: "Login failed",
-        description: error.message || "Failed to login. Please try again.",
+        description: "Failed to login. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -95,11 +84,9 @@ export default function LoginPage() {
                 required
               />
             </div>
-            {(!process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NODE_ENV === "development") && (
-              <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                <strong>Demo Mode:</strong> Enter any email and password to login.
-              </div>
-            )}
+            <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
+              <strong>Demo Mode:</strong> Enter any email and password to login.
+            </div>
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={loading}>
