@@ -1,24 +1,40 @@
-import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { User, UserRole } from '@/types';
 
+interface AuthUser {
+    id: string;
+    email: string;
+    name?: string;
+    role: UserRole;
+    password: string;
+    createdAt: string;
+    updatedAt: string;
+    phone?: string;
+}
+
 export class AuthService {
-    static async signUp(email: string, password: string, name: string, role: UserRole = UserRole.USER) {
+    static async signUp(email: string, password: string, name: string, role: UserRole = UserRole.CAPTAIN, phone?: string) {
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user: User = {
-                id: userCredential.user.uid,
+            // Check if user already exists
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('email', '==', email));
+            const existingUsers = await getDocs(q);
+
+            if (!existingUsers.empty) {
+                throw new Error('User already exists');
+            }
+
+            // Create new user
+            const user: AuthUser = {
+                id: crypto.randomUUID(),
                 email,
                 name,
-                role,
-                createdAt: new Date(),
-                updatedAt: new Date()
+                password,
+                role: role,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                phone: phone || ''
             };
 
             await setDoc(doc(db, 'users', user.id), user);
@@ -30,25 +46,29 @@ export class AuthService {
 
     static async signIn(email: string, password: string) {
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('email', '==', email));
+            const userDocs = await getDocs(q);
 
-            if (!userDoc.exists()) {
-                throw new Error('User data not found');
+            if (userDocs.empty) {
+                throw new Error('User not found');
             }
 
-            return userDoc.data() as User;
+            const userData = userDocs.docs[0].data() as AuthUser;
+            if (userData.password !== password) {
+                throw new Error('Invalid password');
+            }
+
+            // Store user ID in localStorage for session management
+            localStorage.setItem('userId', userData.id);
+            return userData;
         } catch (error: any) {
             throw new Error(error.message);
         }
     }
 
     static async signOut() {
-        try {
-            await signOut(auth);
-        } catch (error: any) {
-            throw new Error(error.message);
-        }
+        localStorage.removeItem('userId');
     }
 
     static async createManagementUser(email: string, password: string, name: string, tournamentIds: string[]) {
@@ -62,21 +82,26 @@ export class AuthService {
     }
 
     static async getCurrentUser(): Promise<User | null> {
-        const currentUser = auth.currentUser;
-        if (!currentUser) return null;
+        const userId = localStorage.getItem('userId');
+        if (!userId) return null;
 
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const userDoc = await getDoc(doc(db, 'users', userId));
         return userDoc.exists() ? userDoc.data() as User : null;
     }
 
     static onAuthStateChange(callback: (user: User | null) => void) {
-        return onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-                callback(userDoc.exists() ? userDoc.data() as User : null);
+        const handleStorageChange = () => {
+            const userId = localStorage.getItem('userId');
+            if (userId) {
+                getDoc(doc(db, 'users', userId)).then(doc => {
+                    callback(doc.exists() ? doc.data() as User : null);
+                });
             } else {
                 callback(null);
             }
-        });
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
     }
 } 

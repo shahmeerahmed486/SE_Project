@@ -11,6 +11,7 @@ export interface BaseUser {
   role: UserRole;
   createdAt: string;
   updatedAt: string;
+  phone?: string;
 }
 
 export interface Admin extends BaseUser {
@@ -25,6 +26,7 @@ export interface ManagementTeam extends BaseUser {
 export interface Captain extends BaseUser {
   role: UserRole.CAPTAIN;
   teamId?: string;
+  phone: string;
 }
 
 export type User = Admin | ManagementTeam | Captain;
@@ -34,6 +36,7 @@ export interface AuthUser {
   password: string;
   name: string;
   role?: UserRole;
+  phone?: string;
 }
 
 export interface Tournament {

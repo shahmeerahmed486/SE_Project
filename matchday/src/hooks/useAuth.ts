@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { User, UserRole, AuthUser } from "@/types"
+import { User, UserRole, AuthUser, Captain } from "@/types"
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -20,86 +20,80 @@ import {
 } from "firebase/firestore"
 import { auth, db } from "@/lib/firebase"
 import Cookies from 'js-cookie'
+import { useRouter } from 'next/navigation'
+import { AuthService, UserCreate } from '@/api/services/AuthService'
 
 export function useAuth() {
     const [user, setUser] = useState<User | null>(null)
     const [loading, setLoading] = useState(true)
+    const router = useRouter()
 
-    // Check for token and load user data
     useEffect(() => {
-        const loadUser = async () => {
-            try {
-                const token = Cookies.get('token')
-                if (!token) {
-                    setUser(null)
-                    setLoading(false)
-                    return
-                }
-
-                // Decode token to get user ID (in a real app, verify the token)
-                const [userId] = token.split('.')
-
-                // Get user data from Firestore
-                const userDoc = await getDoc(doc(db, "users", userId))
-                if (userDoc.exists()) {
-                    setUser({ id: userDoc.id, ...userDoc.data() } as User)
-                } else {
-                    setUser(null)
-                }
-            } catch (error) {
-                console.error('Error loading user:', error)
-                setUser(null)
-            } finally {
-                setLoading(false)
-            }
-        }
-
-        loadUser()
+        checkAuth()
     }, [])
 
-    const signIn = async (email: string, password: string): Promise<User> => {
+    const checkAuth = async () => {
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password)
-            const userDoc = await getDoc(doc(db, "users", userCredential.user.uid))
-
-            if (!userDoc.exists()) {
-                throw new Error("User data not found")
+            const token = Cookies.get('token')
+            if (!token) {
+                setLoading(false)
+                return
             }
 
-            const userData = { id: userDoc.id, ...userDoc.data() } as User
-            setUser(userData)
-            return userData
-        } catch (error: any) {
-            throw new Error(error.message || "Failed to sign in")
+            const user = await AuthService.validateToken(token)
+            setUser(user)
+        } catch (error) {
+            console.error('Auth check failed:', error)
+            Cookies.remove('token')
+        } finally {
+            setLoading(false)
         }
     }
 
-    const signUp = async (userData: AuthUser): Promise<User> => {
+    const signUp = async (userData: UserCreate) => {
         try {
-            // Create authentication user
-            const userCredential = await createUserWithEmailAndPassword(
-                auth,
-                userData.email,
-                userData.password
-            )
-
-            // Create user document in Firestore
-            const newUser: Omit<User, "id"> = {
-                email: userData.email,
-                name: userData.name,
-                role: userData.role || UserRole.USER, // Default to USER role
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            }
-
-            await setDoc(doc(db, "users", userCredential.user.uid), newUser)
-
-            const createdUser = { id: userCredential.user.uid, ...newUser }
-            setUser(createdUser)
-            return createdUser
-        } catch (error: any) {
-            throw new Error(error.message || "Failed to create account")
+            const { user, token } = await AuthService.signup(userData)
+            Cookies.set('token', token, { expires: 7 })
+            setUser(user)
+            return user
+        } catch (error) {
+            console.error('Signup failed:', error)
+            throw error
         }
+    }
+
+    const login = async (email: string, password: string) => {
+        try {
+            const { user, token } = await AuthService.login(email, password)
+            Cookies.set('token', token, { expires: 7 })
+            setUser(user)
+            return user
+        } catch (error) {
+            console.error('Login failed:', error)
+            throw error
+        }
+    }
+
+    const logout = () => {
+        AuthService.logout()
+        setUser(null)
+        router.push('/login')
+    }
+
+    const isAuthenticated = () => {
+        return !!user
+    }
+
+    const isAdmin = () => {
+        return user?.role === UserRole.ADMIN
+    }
+
+    const isManagement = () => {
+        return user?.role === UserRole.MANAGEMENT
+    }
+
+    const isCaptain = () => {
+        return user?.role === UserRole.CAPTAIN
     }
 
     const createManagementUser = async (
@@ -146,21 +140,16 @@ export function useAuth() {
         }
     }
 
-    const signOut = async () => {
-        try {
-            Cookies.remove('token')
-            setUser(null)
-        } catch (error: any) {
-            throw new Error(error.message || "Failed to sign out")
-        }
-    }
-
     return {
         user,
         loading,
-        signIn,
         signUp,
-        signOut,
+        login,
+        logout,
+        isAuthenticated,
+        isAdmin,
+        isManagement,
+        isCaptain,
         createManagementUser,
         becomeCaptain
     }

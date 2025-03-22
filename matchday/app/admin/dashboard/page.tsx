@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthStatus } from "@/src/hooks/useAuthStatus"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -13,6 +13,9 @@ import { Tournament, User, UserRole } from "@/types"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { AuthService } from "@/src/api/services/AuthService"
+import { Plus, Users, Trophy, Settings, ArrowRight, Calendar, MapPin } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { format } from "date-fns"
 
 export default function AdminDashboard() {
   const { user, loading } = useAuthStatus()
@@ -147,86 +150,141 @@ export default function AdminDashboard() {
 
   return (
     <div className="container py-10">
-      <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Manage tournaments and users</p>
+        </div>
+        <Button onClick={() => router.push("/admin/create")}>
+          <Plus className="mr-2 h-4 w-4" />
+          Create Tournament
+        </Button>
+      </div>
 
-      <Tabs defaultValue="tournaments">
+      <div className="grid gap-6 md:grid-cols-3 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Tournaments</CardTitle>
+            <Trophy className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{tournaments.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Active tournaments
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Management Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{managementUsers.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Active management users
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Active</div>
+            <p className="text-xs text-muted-foreground">
+              All systems operational
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="tournaments" className="space-y-6">
         <TabsList>
           <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
           <TabsTrigger value="users">Management Users</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="tournaments">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create New Tournament</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Tournament Name</Label>
-                  <Input
-                    id="name"
-                    value={newTournament.name}
-                    onChange={(e) => setNewTournament({
-                      ...newTournament,
-                      name: e.target.value
-                    })}
-                  />
-                </div>
-                {/* Add other tournament form fields */}
-                <Button type="submit">Create Tournament</Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <div className="mt-8 grid gap-6">
-            <h2 className="text-xl font-bold">Active Tournaments</h2>
+        <TabsContent value="tournaments" className="space-y-6">
+          <div className="grid gap-6">
             {tournaments.map((tournament) => (
-              <Card key={tournament.id}>
+              <Card key={tournament.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
-                  <CardTitle>{tournament.name}</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{tournament.name}</CardTitle>
+                      <CardDescription>{tournament.description}</CardDescription>
+                    </div>
+                    <Badge variant={tournament.status === 'active' ? 'default' : 'secondary'}>
+                      {tournament.status}
+                    </Badge>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Add tournament details and management options */}
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        {format(new Date(tournament.startDate), 'MMM dd, yyyy')} - {format(new Date(tournament.endDate), 'MMM dd, yyyy')}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">{tournament.location}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        {tournament.teamCount}/{tournament.maxTeams} teams
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <Button variant="outline" onClick={() => router.push(`/admin/tournaments/${tournament.id}`)}>
+                      Manage Tournament
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         </TabsContent>
 
-        <TabsContent value="users">
+        <TabsContent value="users" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Create Management User</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleCreateManagementUser} className="space-y-4">
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      email: e.target.value
-                    })}
-                    required
-                  />
+              <form className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                      id="username"
+                      value={newUser.username}
+                      onChange={(e) => setNewUser({
+                        ...newUser,
+                        username: e.target.value
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={newUser.email}
+                      onChange={(e) => setNewUser({
+                        ...newUser,
+                        email: e.target.value
+                      })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="username">Full Name</Label>
-                  <Input
-                    id="username"
-                    value={newUser.username}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      username: e.target.value
-                    })}
-                    required
-                  />
-                </div>
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
@@ -236,7 +294,6 @@ export default function AdminDashboard() {
                       ...newUser,
                       password: e.target.value
                     })}
-                    required
                   />
                 </div>
                 <Button type="submit">Create User</Button>
@@ -244,16 +301,23 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <div className="mt-8 grid gap-6">
-            <h2 className="text-xl font-bold">Management Team Users</h2>
-            {managementUsers.map((managementUser) => (
-              <Card key={managementUser.id}>
+          <div className="grid gap-6">
+            {managementUsers.map((user) => (
+              <Card key={user.id}>
                 <CardHeader>
-                  <CardTitle>{managementUser.username}</CardTitle>
+                  <CardTitle>{user.username}</CardTitle>
+                  <CardDescription>{user.email}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p>{managementUser.email}</p>
-                  {/* Add user management options */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Assigned Tournaments</p>
+                      <p className="text-sm text-muted-foreground">
+                        {user.assignedTournaments?.length || 0} tournaments
+                      </p>
+                    </div>
+                    <Button variant="outline">Manage Assignments</Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

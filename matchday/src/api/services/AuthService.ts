@@ -1,13 +1,11 @@
 import { User, UserRole } from '@/types'
-import { store } from '../store/inMemoryStore'
-import { generateToken } from '../utils/auth'
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import Cookies from 'js-cookie'
 
 const DEFAULT_ADMIN = {
     email: "admin@matchday.com",
-    password: "admin123", // In production, this should be hashed
+    password: "admin123",
     username: "Admin"
 }
 
@@ -16,6 +14,7 @@ export interface UserCreate {
     password: string
     username: string
     role?: UserRole
+    phone?: string
 }
 
 export class AuthService {
@@ -38,10 +37,10 @@ export class AuthService {
                 updatedAt: new Date().toISOString()
             }
 
-            // Store admin in Firestore with password
+            // Store admin in Firestore with plain password
             await setDoc(doc(db, 'users', admin.id), {
                 ...admin,
-                password: DEFAULT_ADMIN.password // In production, this should be hashed
+                password: DEFAULT_ADMIN.password
             })
             console.log('Admin user created successfully')
         } catch (error) {
@@ -51,38 +50,44 @@ export class AuthService {
     }
 
     static async signup(userData: UserCreate): Promise<{ user: User; token: string }> {
-        // Check if user already exists
-        const usersRef = collection(db, 'users')
-        const q = query(usersRef, where('email', '==', userData.email))
-        const querySnapshot = await getDocs(q)
+        try {
+            // Check if user already exists
+            const usersRef = collection(db, 'users')
+            const q = query(usersRef, where('email', '==', userData.email))
+            const querySnapshot = await getDocs(q)
 
-        if (!querySnapshot.empty) {
-            throw new Error('User already exists')
+            if (!querySnapshot.empty) {
+                throw new Error('User already exists')
+            }
+
+            const baseUser = {
+                id: crypto.randomUUID(),
+                email: userData.email,
+                username: userData.username,
+                role: userData.role || UserRole.CAPTAIN,
+                phone: userData.phone || '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            }
+
+            const user: User = baseUser.role === UserRole.CAPTAIN
+                ? { ...baseUser, role: UserRole.CAPTAIN }
+                : baseUser.role === UserRole.MANAGEMENT
+                    ? { ...baseUser, role: UserRole.MANAGEMENT, assignedTournaments: [] }
+                    : { ...baseUser, role: UserRole.ADMIN }
+
+            // Store user in Firestore with plain password
+            await setDoc(doc(db, 'users', user.id), {
+                ...user,
+                password: userData.password
+            })
+
+            const token = `${user.id}.${Date.now()}.${user.role.toLowerCase()}`
+            return { user, token }
+        } catch (error) {
+            console.error('Signup error:', error)
+            throw error
         }
-
-        const baseUser = {
-            id: crypto.randomUUID(),
-            email: userData.email,
-            username: userData.username,
-            role: userData.role || UserRole.CAPTAIN,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        }
-
-        const user: User = baseUser.role === UserRole.CAPTAIN
-            ? { ...baseUser, role: UserRole.CAPTAIN }
-            : baseUser.role === UserRole.MANAGEMENT
-                ? { ...baseUser, role: UserRole.MANAGEMENT, assignedTournaments: [] }
-                : { ...baseUser, role: UserRole.ADMIN }
-
-        // Store user in Firestore with password
-        await setDoc(doc(db, 'users', user.id), {
-            ...user,
-            password: userData.password // In production, this should be hashed
-        })
-
-        const token = `${user.id}.${Date.now()}.${user.role.toLowerCase()}`
-        return { user, token }
     }
 
     static async login(email: string, password: string): Promise<{ user: User; token: string }> {
@@ -122,7 +127,8 @@ export class AuthService {
                 throw new Error('User account is not properly set up')
             }
 
-            if (userData.password !== password) { // In production, use proper password comparison
+            // Compare passwords directly
+            if (userData.password !== password) {
                 throw new Error('Invalid credentials')
             }
 
