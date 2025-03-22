@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Trophy } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { useAuth } from "@/src/hooks/useAuth"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -18,26 +19,23 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const { login } = useAuth()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      // For demo purposes, allow any email/password combination
+      await login(email, password)
       toast({
         title: "Login successful",
         description: "You have been logged in successfully.",
       })
       router.push("/admin/dashboard")
     } catch (error: any) {
-      console.error("Login error:", error)
       toast({
         title: "Login failed",
-        description: "Failed to login. Please try again.",
+        description: error.message || "Failed to login. Please try again.",
         variant: "destructive",
       })
     } finally {
