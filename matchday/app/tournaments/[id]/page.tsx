@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,7 +40,9 @@ interface Match {
   status: string
 }
 
-export default function TournamentDetailsPage({ params }: { params: { id: string } }) {
+export default function TournamentDetailsPage() {
+  const params = useParams()
+  const tournamentId = params?.id as string
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [teams, setTeams] = useState<Team[]>([])
   const [matches, setMatches] = useState<Match[]>([])
@@ -47,10 +50,12 @@ export default function TournamentDetailsPage({ params }: { params: { id: string
 
   useEffect(() => {
     const fetchTournamentData = async () => {
+      if (!tournamentId) return
+
       try {
         // For demo purposes, create sample data
         const sampleTournament: Tournament = {
-          id: params.id,
+          id: tournamentId,
           name: "Summer Football Cup 2023",
           description: "Annual summer football tournament for local teams",
           startDate: "2023-07-15",
@@ -140,7 +145,7 @@ export default function TournamentDetailsPage({ params }: { params: { id: string
     }
 
     fetchTournamentData()
-  }, [params.id])
+  }, [tournamentId])
 
   if (loading) {
     return (

@@ -1,32 +1,47 @@
+export enum UserRole {
+  ADMIN = "ADMIN",
+  MANAGEMENT = "MANAGEMENT",
+  USER = "USER"
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  tournamentIds?: string[]; // Tournament IDs for management team
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Tournament {
-  id: string
-  name: string
-  description: string
-  startDate: string
-  endDate: string
-  location: string
-  format: string
-  status: "draft" | "active" | "completed" | "cancelled"
-  teamCount: number
-  maxTeams: number
-  createdAt: Date
-  createdBy: string
-  rules?: string[]
-  announcements?: Announcement[]
+  id: string;
+  name: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  format: "LEAGUE" | "KNOCKOUT" | "GROUP_KNOCKOUT";
+  status: "DRAFT" | "PUBLISHED" | "IN_PROGRESS" | "COMPLETED";
+  teamCount: number;
+  maxTeams: number;
+  managementTeam?: string[]; // User IDs of management team members
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Team {
-  id: string
-  name: string
-  tournamentId: string
-  captain: {
-    name: string
-    email: string
-    phone: string
-  }
-  players: Player[]
-  status: "pending" | "approved" | "rejected" | "eliminated"
-  createdAt: Date
+  id: string;
+  name: string;
+  description?: string;
+  logo?: string;
+  captainId: string;
+  members: string[];
+  tournamentIds: string[];
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Player {

@@ -19,17 +19,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-  const { login } = useAuth()
+  const { signIn } = useAuth()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      await login(email, password)
+      await signIn(email, password)
       toast({
         title: "Login successful",
-        description: "You have been logged in successfully.",
+        description: "Welcome to the admin dashboard!",
       })
       router.push("/admin/dashboard")
     } catch (error: any) {
@@ -52,7 +52,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>Enter your credentials to access your account</CardDescription>
+          <CardDescription>Enter any email and password to access the demo admin dashboard</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
@@ -61,29 +61,25 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
+                placeholder="demo@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
+                placeholder="Enter any password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
             <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-              <strong>Demo Mode:</strong> Enter any email and password to login.
+              <strong>Demo Mode:</strong> Enter any email and password to login as an admin user.
             </div>
           </CardContent>
           <CardFooter>
