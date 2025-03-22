@@ -29,6 +29,7 @@ export interface Tournament {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  rules?: string[]; // Array of tournament rules
 }
 
 export interface Team {
