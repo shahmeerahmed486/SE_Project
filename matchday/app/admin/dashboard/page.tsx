@@ -9,13 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Tournament, User, UserRole } from "@/types"
-import { collection, query, where, getDocs } from "firebase/firestore"
+import { Tournament, User, UserRole, ManagementTeam } from "@/types"
+import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { AuthService } from "@/src/api/services/AuthService"
-import { Plus, Users, Trophy, Settings, ArrowRight, Calendar, MapPin } from "lucide-react"
+import { Plus, Users, Trophy, Settings, ArrowRight, Calendar, MapPin, Check, X, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 export default function AdminDashboard() {
   const { user, loading } = useAuthStatus()
@@ -23,6 +24,10 @@ export default function AdminDashboard() {
   const { toast } = useToast()
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [managementUsers, setManagementUsers] = useState<User[]>([])
+  const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null)
+  const [newRule, setNewRule] = useState("")
+  const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null)
+  const [editingRule, setEditingRule] = useState("")
 
   // New management user form state
   const [newUser, setNewUser] = useState({
@@ -68,10 +73,16 @@ export default function AdminDashboard() {
       try {
         // Fetch tournaments
         const tournamentsSnapshot = await getDocs(collection(db, "tournaments"))
-        const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Tournament[]
+        const tournamentsData = tournamentsSnapshot.docs.map(doc => {
+          const data = doc.data()
+          return {
+            id: doc.id,
+            ...data,
+            startDate: data.startDate ? new Date(data.startDate).toISOString() : null,
+            endDate: data.endDate ? new Date(data.endDate).toISOString() : null,
+            registrationDeadline: data.registrationDeadline ? new Date(data.registrationDeadline).toISOString() : null
+          }
+        }) as Tournament[]
         setTournaments(tournamentsData)
 
         // Fetch management users
@@ -135,6 +146,119 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to create user",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleAddRule = async () => {
+    if (!selectedTournament || !newRule.trim()) return
+
+    try {
+      const tournamentRef = doc(db, "tournaments", selectedTournament.id)
+      await updateDoc(tournamentRef, {
+        rules: arrayUnion(newRule.trim())
+      })
+
+      // Update local state
+      setTournaments(tournaments.map(t => 
+        t.id === selectedTournament.id 
+          ? { ...t, rules: [...(t.rules || []), newRule.trim()] }
+          : t
+      ))
+      setSelectedTournament(prev => prev ? {
+        ...prev,
+        rules: [...(prev.rules || []), newRule.trim()]
+      } : null)
+      setNewRule("")
+      
+      toast({
+        title: "Success",
+        description: "Rule added successfully"
+      })
+    } catch (error) {
+      console.error("Error adding rule:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add rule",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleEditRule = async (index: number) => {
+    if (!selectedTournament || !editingRule.trim()) return
+
+    try {
+      const tournamentRef = doc(db, "tournaments", selectedTournament.id)
+      const updatedRules = [...(selectedTournament.rules || [])]
+      updatedRules[index] = editingRule.trim()
+
+      await updateDoc(tournamentRef, {
+        rules: updatedRules
+      })
+
+      // Update local state
+      setTournaments(tournaments.map(t => 
+        t.id === selectedTournament.id 
+          ? { ...t, rules: updatedRules }
+          : t
+      ))
+      setSelectedTournament(prev => prev ? {
+        ...prev,
+        rules: updatedRules
+      } : null)
+      setEditingRuleIndex(null)
+      setEditingRule("")
+
+      toast({
+        title: "Success",
+        description: "Rule updated successfully"
+      })
+    } catch (error) {
+      console.error("Error updating rule:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update rule",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteRule = async (index: number) => {
+    if (!selectedTournament) return
+
+    try {
+      const tournamentRef = doc(db, "tournaments", selectedTournament.id)
+      const ruleToDelete = selectedTournament.rules?.[index]
+      
+      if (!ruleToDelete) return
+
+      await updateDoc(tournamentRef, {
+        rules: arrayRemove(ruleToDelete)
+      })
+
+      // Update local state
+      const updatedRules = selectedTournament.rules?.filter((_, i) => i !== index) || []
+      setTournaments(tournaments.map(t => 
+        t.id === selectedTournament.id 
+          ? { ...t, rules: updatedRules }
+          : t
+      ))
+      setSelectedTournament(prev => prev ? {
+        ...prev,
+        rules: updatedRules
+      } : null)
+
+      toast({
+        title: "Success",
+        description: "Rule deleted successfully"
+      })
+    } catch (error) {
+      console.error("Error deleting rule:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete rule",
         variant: "destructive"
       })
     }
@@ -214,9 +338,9 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle>{tournament.name}</CardTitle>
-                      <CardDescription>{tournament.description}</CardDescription>
+                      <CardDescription>{tournament.rules?.join(', ') || 'No rules specified'}</CardDescription>
                     </div>
-                    <Badge variant={tournament.status === 'active' ? 'default' : 'secondary'}>
+                    <Badge variant={tournament.status === 'IN_PROGRESS' ? 'default' : 'secondary'}>
                       {tournament.status}
                     </Badge>
                   </div>
@@ -226,24 +350,38 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">
-                        {format(new Date(tournament.startDate), 'MMM dd, yyyy')} - {format(new Date(tournament.endDate), 'MMM dd, yyyy')}
+                        {tournament.startDate && tournament.endDate ? (
+                          <>
+                            {format(new Date(tournament.startDate), 'MMM dd, yyyy')} - {format(new Date(tournament.endDate), 'MMM dd, yyyy')}
+                          </>
+                        ) : (
+                          'Dates not set'
+                        )}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{tournament.location}</span>
+                      <span className="text-sm">
+                        {tournament.registrationDeadline ? (
+                          `Registration Deadline: ${format(new Date(tournament.registrationDeadline), 'MMM dd, yyyy')}`
+                        ) : (
+                          'No registration deadline set'
+                        )}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">
-                        {tournament.teamCount}/{tournament.maxTeams} teams
+                        {tournament.teamCount}/{tournament.teamLimit} teams
                       </span>
                     </div>
                   </div>
-                  <div className="mt-4 flex justify-end">
-                    <Button variant="outline" onClick={() => router.push(`/admin/tournaments/${tournament.id}`)}>
-                      Manage Tournament
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSelectedTournament(tournament)}
+                    >
+                      Manage Rules
                     </Button>
                   </div>
                 </CardContent>
@@ -313,7 +451,7 @@ export default function AdminDashboard() {
                     <div className="space-y-1">
                       <p className="text-sm font-medium">Assigned Tournaments</p>
                       <p className="text-sm text-muted-foreground">
-                        {user.assignedTournaments?.length || 0} tournaments
+                        {(user as ManagementTeam).assignedTournaments?.length || 0} tournaments
                       </p>
                     </div>
                     <Button variant="outline">Manage Assignments</Button>
@@ -324,6 +462,81 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Rules Dialog */}
+      <Dialog open={!!selectedTournament} onOpenChange={() => setSelectedTournament(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Define Rules for {selectedTournament?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter a new rule"
+                value={newRule}
+                onChange={(e) => setNewRule(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddRule()}
+              />
+              <Button onClick={handleAddRule}>
+                Add Rule
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {selectedTournament?.rules?.map((rule, index) => (
+                <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                  {editingRuleIndex === index ? (
+                    <>
+                      <Input
+                        value={editingRule}
+                        onChange={(e) => setEditingRule(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleEditRule(index)}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleEditRule(index)}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingRuleIndex(null)
+                          setEditingRule("")
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1">{rule}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingRuleIndex(index)
+                          setEditingRule(rule)
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleDeleteRule(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,64 +1,65 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { onSnapshot, doc, query, collection, where } from "firebase/firestore"
-import { clientDb } from "@/lib/firebase"
-import { Tournament, Team, Match } from "@/types"
-import { FirebaseService } from "@/src/services/firebase/FirebaseService"
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { onSnapshot, doc, query, collection, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Tournament, Team, Match } from "@/types";
 
-export default function TournamentDetailsPage({ params }: { params: { id: string } }) {
-    const [tournament, setTournament] = useState<Tournament | null>(null)
-    const [teams, setTeams] = useState<Team[]>([])
-    const [matches, setMatches] = useState<Match[]>([])
-    const [loading, setLoading] = useState(true)
-    const router = useRouter()
+export default function TournamentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params); // Unwrap the params promise
+
+    const [tournament, setTournament] = useState<Tournament | null>(null);
+    const [teams, setTeams] = useState<Team[]>([]);
+    const [matches, setMatches] = useState<Match[]>([]);
+    const [loading, setLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
         // Real-time tournament updates
         const unsubTournament = onSnapshot(
-            doc(clientDb, "tournaments", params.id),
-            (doc) => {
-                if (doc.exists()) {
-                    setTournament({ id: doc.id, ...doc.data() } as Tournament)
+            doc(db, "tournaments", id),
+            (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    setTournament({ id: docSnapshot.id, ...docSnapshot.data() } as Tournament);
                 } else {
-                    router.push("/admin/tournaments")
+                    router.push("/admin/tournaments");
                 }
             }
-        )
+        );
 
         // Real-time teams updates
         const unsubTeams = onSnapshot(
-            query(collection(clientDb, "teams"), where("tournamentId", "==", params.id)),
+            query(collection(db, "teams"), where("tournamentId", "==", id)),
             (snapshot) => {
-                const teamsData: Team[] = []
+                const teamsData: Team[] = [];
                 snapshot.forEach((doc) => {
-                    teamsData.push({ id: doc.id, ...doc.data() } as Team)
-                })
-                setTeams(teamsData)
+                    teamsData.push({ id: doc.id, ...doc.data() } as Team);
+                });
+                setTeams(teamsData);
             }
-        )
+        );
 
         // Real-time matches updates
         const unsubMatches = onSnapshot(
-            query(collection(clientDb, "matches"), where("tournamentId", "==", params.id)),
+            query(collection(db, "matches"), where("tournamentId", "==", id)),
             (snapshot) => {
-                const matchesData: Match[] = []
+                const matchesData: Match[] = [];
                 snapshot.forEach((doc) => {
-                    matchesData.push({ id: doc.id, ...doc.data() } as Match)
-                })
-                setMatches(matchesData)
+                    matchesData.push({ id: doc.id, ...doc.data() } as Match);
+                });
+                setMatches(matchesData);
             }
-        )
+        );
 
-        setLoading(false)
+        setLoading(false);
 
         return () => {
-            unsubTournament()
-            unsubTeams()
-            unsubMatches()
+            unsubTournament();
+            unsubTeams();
+            unsubMatches();
         }
-    }, [params.id, router])
+    }, [id, router]);
 
-    // ... rest of the component
-} 
+    // ... rest of your component rendering logic
+}
