@@ -1,25 +1,28 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { ClientLayout } from "./client-layout"
+import { Nav } from "@/components/nav"
+import { Footer } from "@/components/footer"
+import { Providers } from "@/components/providers"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-    title: "Matchday - Tournament Management System",
-    description: "Efficiently manage sports tournaments with real-time updates",
-    generator: 'v0.dev'
+    title: "MatchDay - Tournament Management System",
+    description: "Organize and manage sports tournaments with ease",
 }
 
-export default function RootLayout({
-    children,
-}: {
-    children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" suppressHydrationWarning>
             <body className={inter.className}>
-                <ClientLayout>{children}</ClientLayout>
+                <Providers>
+                    <div className="flex min-h-screen flex-col bg-background">
+                        <Nav />
+                        {children}
+                        <Footer />
+                    </div>
+                </Providers>
             </body>
         </html>
     )

@@ -1,175 +1,108 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
-import { collection, getDocs, query, where } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { useState } from "react"
+import { Search, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Trophy, Calendar, Users, MapPin } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import TournamentGrid from "@/components/tournament/TournamentGrid"
 
-interface Tournament {
-  id: string
-  name: string
-  description: string
-  startDate: string
-  endDate: string
-  location: string
-  format: string
-  status: string
-  teamCount: number
-  maxTeams: number
+const filters = {
+  status: [
+    { value: "all", label: "All Status" },
+    { value: "upcoming", label: "Upcoming" },
+    { value: "ongoing", label: "Ongoing" },
+    { value: "completed", label: "Completed" },
+  ],
+  format: [
+    { value: "all", label: "All Formats" },
+    { value: "knockout", label: "Knockout" },
+    { value: "league", label: "League" },
+    { value: "roundRobin", label: "Round Robin" },
+  ],
 }
 
 export default function TournamentsPage() {
-  const [tournaments, setTournaments] = useState<Tournament[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchTournaments = async () => {
-      try {
-        // Get active tournaments
-        const q = query(collection(db, "tournaments"), where("status", "==", "active"))
-
-        const querySnapshot = await getDocs(q)
-        const tournamentsData: Tournament[] = []
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data()
-          tournamentsData.push({
-            id: doc.id,
-            name: data.name,
-            description: data.description,
-            startDate: data.startDate,
-            endDate: data.endDate,
-            location: data.location,
-            format: data.format,
-            status: data.status,
-            teamCount: data.teamCount || 0,
-            maxTeams: data.maxTeams,
-          })
-        })
-
-        setTournaments(tournamentsData)
-      } catch (error) {
-        console.error("Error fetching tournaments:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchTournaments()
-  }, [])
-
-  // For demo purposes, add some sample tournaments if none exist
-  useEffect(() => {
-    if (!loading && tournaments.length === 0) {
-      const sampleTournaments: Tournament[] = [
-        {
-          id: "1",
-          name: "Summer Football Cup 2023",
-          description: "Annual summer football tournament for local teams",
-          startDate: "2023-07-15",
-          endDate: "2023-08-20",
-          location: "City Sports Complex",
-          format: "League + Knockout",
-          status: "active",
-          teamCount: 12,
-          maxTeams: 16,
-        },
-        {
-          id: "2",
-          name: "Basketball Championship",
-          description: "Regional basketball championship for amateur teams",
-          startDate: "2023-09-05",
-          endDate: "2023-10-15",
-          location: "Downtown Arena",
-          format: "Round Robin",
-          status: "active",
-          teamCount: 8,
-          maxTeams: 8,
-        },
-        {
-          id: "3",
-          name: "Volleyball Tournament",
-          description: "Beach volleyball tournament open for all skill levels",
-          startDate: "2023-08-01",
-          endDate: "2023-08-10",
-          location: "Seaside Beach",
-          format: "Knockout",
-          status: "active",
-          teamCount: 10,
-          maxTeams: 16,
-        },
-      ]
-
-      setTournaments(sampleTournaments)
-    }
-  }, [loading, tournaments])
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [formatFilter, setFormatFilter] = useState("all")
 
   return (
-    <div className="container py-10">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-2">
-          <Link href="/" className="flex items-center gap-2">
-            <Trophy className="h-6 w-6" />
-            <span className="font-bold">Matchday</span>
-          </Link>
-          <span className="mx-2">|</span>
-          <h1 className="text-2xl font-bold">Tournaments</h1>
+    <main className="flex-1">
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Tournaments</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Browse and register for upcoming tournaments or view ongoing competitions.
+          </p>
         </div>
-        <Link href="/register">
-          <Button>Register Your Team</Button>
-        </Link>
-      </div>
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        {/* Search and Filters */}
+        <div className="mb-8 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <Input
+                type="search"
+                placeholder="Search tournaments..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="flex gap-4">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filters.status.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={formatFilter} onValueChange={setFormatFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Format" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filters.format.map((format) => (
+                    <SelectItem key={format.value} value={format.value}>
+                      {format.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Showing all tournaments
+            </div>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Filter className="h-4 w-4" />
+              More Filters
+            </Button>
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {tournaments.map((tournament) => (
-            <Card key={tournament.id} className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <CardTitle>{tournament.name}</CardTitle>
-                  <Badge>{tournament.format}</Badge>
-                </div>
-                <CardDescription>{tournament.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    {new Date(tournament.startDate).toLocaleDateString()} -{" "}
-                    {new Date(tournament.endDate).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{tournament.location}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    {tournament.teamCount} / {tournament.maxTeams} teams
-                  </span>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Link href={`/tournaments/${tournament.id}`} className="w-full">
-                  <Button variant="outline" className="w-full">
-                    View Details
-                  </Button>
-                </Link>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+
+        {/* Tournament Grid */}
+        <TournamentGrid
+          searchQuery={searchQuery}
+          statusFilter={statusFilter}
+          formatFilter={formatFilter}
+        />
+      </div>
+    </main>
   )
 }
 

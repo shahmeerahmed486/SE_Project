@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { UserRole } from '@/types'
 import { Toast } from '@/components/ui/toast'
 import Cookies from 'js-cookie'
+import { dispatchAuthStateChange } from '@/src/hooks/useAuthStatus'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -35,8 +36,8 @@ export default function LoginPage() {
       setToastType('success')
       setShowToast(true)
 
-      // Trigger auth state change
-      window.dispatchEvent(new Event('authStateChange'))
+      // Notify auth state change
+      dispatchAuthStateChange()
 
       // Get the redirect URL from query params or use default based on role
       const from = searchParams.get('from')

@@ -6,6 +6,14 @@ import { AuthService } from '@/src/api/services/AuthService'
 import Cookies from 'js-cookie'
 import { User } from '@/types'
 
+// Create a custom event for auth state changes
+const AUTH_STATE_CHANGE = 'authStateChange'
+
+// Create a custom event dispatcher
+export const dispatchAuthStateChange = () => {
+    window.dispatchEvent(new Event(AUTH_STATE_CHANGE))
+}
+
 export function useAuthStatus() {
     const [user, setUser] = useState<User | null>(null)
     const [loading, setLoading] = useState(true)
@@ -23,20 +31,22 @@ export function useAuthStatus() {
         } catch (error) {
             console.error('Auth check error:', error)
             setUser(null)
+            Cookies.remove('token')
         } finally {
             setLoading(false)
         }
     }
 
+    // Check auth on mount and token change
     useEffect(() => {
         checkAuth()
     }, [])
 
-    // Add event listener for auth state changes
+    // Listen for auth state changes
     useEffect(() => {
-        window.addEventListener('authStateChange', checkAuth)
+        window.addEventListener(AUTH_STATE_CHANGE, checkAuth)
         return () => {
-            window.removeEventListener('authStateChange', checkAuth)
+            window.removeEventListener(AUTH_STATE_CHANGE, checkAuth)
         }
     }, [])
 
@@ -45,7 +55,7 @@ export function useAuthStatus() {
         setUser(null)
         router.push('/')
         router.refresh()
-        window.dispatchEvent(new Event('authStateChange'))
+        dispatchAuthStateChange()
     }
 
     return { user, loading, logout, refreshAuth: checkAuth }

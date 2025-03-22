@@ -7,7 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Users, MapPin, ArrowLeft } from "lucide-react"
+import { Calendar, Users, MapPin, ArrowLeft, Trophy, Info, Shield, Award } from "lucide-react"
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/src/firebase/config'
+import TeamRegistrationForm from '@/components/tournament/TeamRegistrationForm'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 interface Tournament {
   id: string
@@ -20,6 +31,8 @@ interface Tournament {
   status: string
   teamCount: number
   maxTeams: number
+  rules: string[]
+  prizes: string[]
 }
 
 interface Team {
@@ -47,98 +60,23 @@ export default function TournamentDetailsPage() {
   const [teams, setTeams] = useState<Team[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchTournamentData = async () => {
       if (!tournamentId) return
 
       try {
-        // For demo purposes, create sample data
-        const sampleTournament: Tournament = {
-          id: tournamentId,
-          name: "Summer Football Cup 2023",
-          description: "Annual summer football tournament for local teams",
-          startDate: "2023-07-15",
-          endDate: "2023-08-20",
-          location: "City Sports Complex",
-          format: "League + Knockout",
-          status: "active",
-          teamCount: 12,
-          maxTeams: 16,
+        const tournamentDoc = await getDoc(doc(db, 'tournaments', tournamentId))
+        if (tournamentDoc.exists()) {
+          setTournament({ id: tournamentDoc.id, ...tournamentDoc.data() } as Tournament)
+        } else {
+          setError('Tournament not found')
         }
-
-        const sampleTeams: Team[] = [
-          { id: "1", name: "Thunderbolts FC", captainName: "John Smith" },
-          { id: "2", name: "Phoenix Rising", captainName: "Sarah Johnson" },
-          { id: "3", name: "Royal Eagles", captainName: "Michael Brown" },
-          { id: "4", name: "Dynamo United", captainName: "Emma Wilson" },
-          { id: "5", name: "Spartans SC", captainName: "David Lee" },
-          { id: "6", name: "Titans Athletic", captainName: "Jessica Taylor" },
-        ]
-
-        const sampleMatches: Match[] = [
-          {
-            id: "1",
-            teamA: "Thunderbolts FC",
-            teamB: "Phoenix Rising",
-            scoreA: 2,
-            scoreB: 1,
-            date: "2023-07-15",
-            time: "14:00",
-            location: "Field A",
-            status: "completed",
-          },
-          {
-            id: "2",
-            teamA: "Royal Eagles",
-            teamB: "Dynamo United",
-            scoreA: 0,
-            scoreB: 0,
-            date: "2023-07-15",
-            time: "16:30",
-            location: "Field B",
-            status: "completed",
-          },
-          {
-            id: "3",
-            teamA: "Spartans SC",
-            teamB: "Titans Athletic",
-            scoreA: 3,
-            scoreB: 2,
-            date: "2023-07-16",
-            time: "15:00",
-            location: "Field A",
-            status: "completed",
-          },
-          {
-            id: "4",
-            teamA: "Thunderbolts FC",
-            teamB: "Royal Eagles",
-            scoreA: null,
-            scoreB: null,
-            date: "2023-07-22",
-            time: "14:00",
-            location: "Field A",
-            status: "scheduled",
-          },
-          {
-            id: "5",
-            teamA: "Phoenix Rising",
-            teamB: "Spartans SC",
-            scoreA: null,
-            scoreB: null,
-            date: "2023-07-22",
-            time: "16:30",
-            location: "Field B",
-            status: "scheduled",
-          },
-        ]
-
-        setTournament(sampleTournament)
-        setTeams(sampleTeams)
-        setMatches(sampleMatches)
       } catch (error) {
-        console.error("Error fetching tournament data:", error)
+        console.error('Error fetching tournament:', error)
+        setError('Failed to load tournament details')
       } finally {
         setLoading(false)
       }
@@ -146,6 +84,11 @@ export default function TournamentDetailsPage() {
 
     fetchTournamentData()
   }, [tournamentId])
+
+  const handleRegistration = async (data: any) => {
+    // Implement team registration logic here
+    console.log('Registration data:', data)
+  }
 
   if (loading) {
     return (
@@ -155,15 +98,22 @@ export default function TournamentDetailsPage() {
     )
   }
 
-  if (!tournament) {
+  if (error || !tournament) {
     return (
       <div className="container py-10 text-center">
-        <h1 className="text-2xl font-bold mb-4">Tournament not found</h1>
+        <h1 className="text-2xl font-bold text-red-600 dark:text-red-400 mb-4">
+          {error || 'Tournament not found'}
+        </h1>
         <Link href="/tournaments">
           <Button>Back to Tournaments</Button>
         </Link>
       </div>
     )
+  }
+
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
+    return new Date(dateString).toLocaleDateString('en-US', options)
   }
 
   return (
@@ -192,8 +142,7 @@ export default function TournamentDetailsPage() {
             <CardContent className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span>
-                {new Date(tournament.startDate).toLocaleDateString()} -{" "}
-                {new Date(tournament.endDate).toLocaleDateString()}
+                {formatDate(tournament.startDate)} - {formatDate(tournament.endDate)}
               </span>
             </CardContent>
           </Card>
@@ -213,7 +162,7 @@ export default function TournamentDetailsPage() {
             <CardContent className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <span>
-                {tournament.teamCount} / {tournament.maxTeams}
+                {tournament.teamsRegistered} / {tournament.maxTeams}
               </span>
             </CardContent>
           </Card>
@@ -300,7 +249,39 @@ export default function TournamentDetailsPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
+          <h2 className="text-xl font-semibold mb-4">Registration</h2>
+          {tournament.registrationStatus === 'open' ? (
+            <div>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Spots remaining: {tournament.maxTeams - tournament.teamsRegistered}
+              </p>
+              <Button
+                className="w-full"
+                onClick={() => setShowRegistrationForm(true)}
+                disabled={tournament.teamsRegistered >= tournament.maxTeams}
+              >
+                Register Your Team
+              </Button>
+            </div>
+          ) : (
+            <p className="text-red-600 dark:text-red-400">
+              Registration is currently closed for this tournament.
+            </p>
+          )}
+        </div>
       </div>
+
+      {showRegistrationForm && (
+        <TeamRegistrationForm
+          tournamentId={tournament.id}
+          maxPlayers={20}
+          minPlayers={11}
+          onClose={() => setShowRegistrationForm(false)}
+          onSubmit={handleRegistration}
+        />
+      )}
     </div>
   )
 }
