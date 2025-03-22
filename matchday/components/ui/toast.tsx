@@ -4,8 +4,9 @@ import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
-
 import { cn } from "@/lib/utils"
+import { AnimatePresence, motion } from "framer-motion"
+import { CheckCircle, XCircle } from "lucide-react"
 
 const ToastProvider = ToastPrimitives.Provider
 
@@ -40,10 +41,10 @@ const toastVariants = cva(
   }
 )
 
-const Toast = React.forwardRef<
+const ToastRoot = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-    VariantProps<typeof toastVariants>
+  VariantProps<typeof toastVariants>
 >(({ className, variant, ...props }, ref) => {
   return (
     <ToastPrimitives.Root
@@ -53,7 +54,7 @@ const Toast = React.forwardRef<
     />
   )
 })
-Toast.displayName = ToastPrimitives.Root.displayName
+ToastRoot.displayName = ToastPrimitives.Root.displayName
 
 const ToastAction = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Action>,
@@ -112,15 +113,52 @@ const ToastDescription = React.forwardRef<
 ))
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
-type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
-
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
+interface CustomToastProps {
+  message: string
+  type: "success" | "error"
+  onClose: () => void
+  duration?: number
+}
+
+const Toast = ({ message, type, onClose, duration = 3000 }: CustomToastProps) => {
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose()
+    }, duration)
+
+    return () => clearTimeout(timer)
+  }, [duration, onClose])
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 50 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 20 }}
+        className={cn(
+          "fixed bottom-4 right-4 flex items-center gap-2 rounded-lg px-4 py-2 text-white shadow-lg",
+          type === "success" ? "bg-green-600" : "bg-red-600"
+        )}
+      >
+        {type === "success" ? (
+          <CheckCircle className="h-5 w-5" />
+        ) : (
+          <XCircle className="h-5 w-5" />
+        )}
+        <p className="text-sm font-medium">{message}</p>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
 export {
-  type ToastProps,
   type ToastActionElement,
+  type CustomToastProps,
   ToastProvider,
   ToastViewport,
+  ToastRoot,
   Toast,
   ToastTitle,
   ToastDescription,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/src/hooks/useAuth"
+import { useAuthStatus } from "@/src/hooks/useAuthStatus"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,9 +12,10 @@ import { useToast } from "@/components/ui/use-toast"
 import { Tournament, User, UserRole } from "@/types"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase"
+import { AuthService } from "@/src/api/services/AuthService"
 
 export default function AdminDashboard() {
-  const { user, loading, createManagementUser } = useAuth()
+  const { user, loading } = useAuthStatus()
   const router = useRouter()
   const { toast } = useToast()
   const [tournaments, setTournaments] = useState<Tournament[]>([])
@@ -24,7 +25,7 @@ export default function AdminDashboard() {
   const [newUser, setNewUser] = useState({
     email: "",
     password: "",
-    name: "",
+    username: "",
     assignedTournaments: [] as string[]
   })
 
@@ -39,12 +40,27 @@ export default function AdminDashboard() {
     maxTeams: 16
   })
 
+  // Check authentication and role
   useEffect(() => {
-    if (!loading && (!user || user.role !== UserRole.ADMIN)) {
-      router.push("/login")
-      return
-    }
+    if (!loading) {
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
+      if (user.role !== UserRole.ADMIN) {
+        toast({
+          title: "Unauthorized",
+          description: "You must be an admin to access this page",
+          variant: "destructive"
+        })
+        router.push('/')
+        return
+      }
+    }
+  }, [user, loading, router, toast])
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch tournaments
@@ -82,26 +98,40 @@ export default function AdminDashboard() {
   const handleCreateManagementUser = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await createManagementUser(
-        newUser.email,
-        newUser.password,
-        newUser.name,
-        newUser.assignedTournaments
-      )
+      await AuthService.createManagementUser({
+        email: newUser.email,
+        password: newUser.password,
+        username: newUser.username
+      })
+
       toast({
         title: "Success",
         description: "Management team user created successfully"
       })
+
+      // Reset form
       setNewUser({
         email: "",
         password: "",
-        name: "",
+        username: "",
         assignedTournaments: []
       })
+
+      // Refresh management users list
+      const managementUsersQuery = query(
+        collection(db, "users"),
+        where("role", "==", UserRole.MANAGEMENT)
+      )
+      const managementUsersSnapshot = await getDocs(managementUsersQuery)
+      const managementUsersData = managementUsersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as User[]
+      setManagementUsers(managementUsersData)
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to create user",
         variant: "destructive"
       })
     }
@@ -109,6 +139,10 @@ export default function AdminDashboard() {
 
   if (loading) {
     return <div>Loading...</div>
+  }
+
+  if (!user || user.role !== UserRole.ADMIN) {
+    return null
   }
 
   return (
@@ -177,17 +211,19 @@ export default function AdminDashboard() {
                       ...newUser,
                       email: e.target.value
                     })}
+                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="username">Full Name</Label>
                   <Input
-                    id="name"
-                    value={newUser.name}
+                    id="username"
+                    value={newUser.username}
                     onChange={(e) => setNewUser({
                       ...newUser,
-                      name: e.target.value
+                      username: e.target.value
                     })}
+                    required
                   />
                 </div>
                 <div>
@@ -200,6 +236,7 @@ export default function AdminDashboard() {
                       ...newUser,
                       password: e.target.value
                     })}
+                    required
                   />
                 </div>
                 <Button type="submit">Create User</Button>
@@ -212,7 +249,7 @@ export default function AdminDashboard() {
             {managementUsers.map((managementUser) => (
               <Card key={managementUser.id}>
                 <CardHeader>
-                  <CardTitle>{managementUser.name}</CardTitle>
+                  <CardTitle>{managementUser.username}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p>{managementUser.email}</p>

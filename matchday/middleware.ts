@@ -1,39 +1,58 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { adminAuth } from './app/api/firebase-admin'
 
-export async function middleware(request: NextRequest) {
-    const token = request.headers.get('Authorization')?.split('Bearer ')[1]
+export function middleware(request: NextRequest) {
+    // List of protected routes that require authentication
+    const protectedRoutes = [
+        '/admin',
+        '/management',
+        '/captain',
+        '/tournaments/create',
+        '/tournaments/edit',
+    ]
+
+    // Check if the current path matches any protected route
+    const isProtectedRoute = protectedRoutes.some(route =>
+        request.nextUrl.pathname.startsWith(route)
+    )
+
+    if (!isProtectedRoute) {
+        return NextResponse.next()
+    }
+
+    const token = request.cookies.get('token')?.value
 
     if (!token) {
-        return NextResponse.json(
-            { error: 'Missing authentication token' },
-            { status: 401 }
-        )
+        const url = new URL('/login', request.url)
+        url.searchParams.set('from', request.nextUrl.pathname)
+        return NextResponse.redirect(url)
     }
 
-    try {
-        const decodedToken = await adminAuth.verifyIdToken(token)
-        const userRecord = await adminAuth.getUser(decodedToken.uid)
+    // Check role-based access
+    const [, , role] = token.split('.')
+    const path = request.nextUrl.pathname
 
-        // Add user info to request headers
-        const requestHeaders = new Headers(request.headers)
-        requestHeaders.set('X-User-ID', userRecord.uid)
-        requestHeaders.set('X-User-Role', decodedToken.role || 'USER')
-
-        return NextResponse.next({
-            request: {
-                headers: requestHeaders,
-            },
-        })
-    } catch (error) {
-        return NextResponse.json(
-            { error: 'Invalid authentication token' },
-            { status: 401 }
-        )
+    if (path.startsWith('/admin') && role !== 'admin') {
+        return NextResponse.redirect(new URL('/', request.url))
     }
+
+    if (path.startsWith('/management') && role !== 'management') {
+        return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    if (path.startsWith('/captain') && role !== 'captain') {
+        return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    return NextResponse.next()
 }
 
 export const config = {
-    matcher: ['/api/:path*']
+    matcher: [
+        '/admin/:path*',
+        '/management/:path*',
+        '/captain/:path*',
+        '/tournaments/create',
+        '/tournaments/edit/:path*',
+    ]
 } 

@@ -1,63 +1,58 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Trophy, Plus, Trash2 } from "lucide-react"
+import { Trophy } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { useAuth } from "@/src/hooks/useAuth"
 
 export default function RegisterPage() {
-  const [teamName, setTeamName] = useState("")
-  const [captainName, setCaptainName] = useState("")
-  const [captainEmail, setCaptainEmail] = useState("")
-  const [captainPhone, setCaptainPhone] = useState("")
-  const [players, setPlayers] = useState([{ name: "", position: "" }])
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    confirmPassword: "",
+    name: ""
+  })
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
   const { toast } = useToast()
+  const { signUp } = useAuth()
 
-  const addPlayer = () => {
-    setPlayers([...players, { name: "", position: "" }])
-  }
-
-  const removePlayer = (index: number) => {
-    const updatedPlayers = [...players]
-    updatedPlayers.splice(index, 1)
-    setPlayers(updatedPlayers)
-  }
-
-  const updatePlayer = (index: number, field: string, value: string) => {
-    const updatedPlayers = [...players]
-    updatedPlayers[index] = { ...updatedPlayers[index], [field]: value }
-    setPlayers(updatedPlayers)
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
     try {
-      // For demo purposes, just simulate the registration
-      toast({
-        title: "Registration submitted",
-        description: "Your team registration has been submitted for review.",
+      // Validate passwords match
+      if (formData.password !== formData.confirmPassword) {
+        throw new Error("Passwords do not match")
+      }
+
+      // Validate password strength
+      if (formData.password.length < 6) {
+        throw new Error("Password must be at least 6 characters long")
+      }
+
+      await signUp({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name
       })
 
-      // Reset form
-      setTeamName("")
-      setCaptainName("")
-      setCaptainEmail("")
-      setCaptainPhone("")
-      setPlayers([{ name: "", position: "" }])
+      toast({
+        title: "Registration successful",
+        description: "Your account has been created. You can now log in.",
+      })
+      router.push("/login")
     } catch (error: any) {
-      console.error("Registration error:", error)
       toast({
         title: "Registration failed",
-        description: error.message || "Failed to submit registration. Please try again.",
+        description: error.message || "Failed to create account. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -65,106 +60,83 @@ export default function RegisterPage() {
     }
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
   return (
-    <div className="container py-10">
-      <Link href="/" className="flex items-center gap-2 mb-8">
+    <div className="container flex h-screen w-screen flex-col items-center justify-center">
+      <Link href="/" className="absolute left-4 top-4 md:left-8 md:top-8 flex items-center gap-2">
         <Trophy className="h-6 w-6" />
         <span className="font-bold">Matchday</span>
       </Link>
-
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl">Team Registration</CardTitle>
-          <CardDescription>Register your team for upcoming tournaments</CardDescription>
+          <CardTitle className="text-2xl">Create an account</CardTitle>
+          <CardDescription>Enter your details to register</CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-6">
+        <form onSubmit={handleRegister}>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="teamName">Team Name</Label>
-              <Input id="teamName" value={teamName} onChange={(e) => setTeamName(e.target.value)} required />
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                name="name"
+                placeholder="John Doe"
+                value={formData.name}
+                onChange={handleInputChange}
+                required
+              />
             </div>
-
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Captain Information</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="captainName">Captain Name</Label>
-                  <Input
-                    id="captainName"
-                    value={captainName}
-                    onChange={(e) => setCaptainName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="captainEmail">Email</Label>
-                  <Input
-                    id="captainEmail"
-                    type="email"
-                    value={captainEmail}
-                    onChange={(e) => setCaptainEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="captainPhone">Phone Number</Label>
-                  <Input
-                    id="captainPhone"
-                    value={captainPhone}
-                    onChange={(e) => setCaptainPhone(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="m@example.com"
+                value={formData.email}
+                onChange={handleInputChange}
+                required
+              />
             </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium">Players</h3>
-                <Button type="button" variant="outline" size="sm" onClick={addPlayer}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Player
-                </Button>
-              </div>
-
-              {players.map((player, index) => (
-                <div key={index} className="grid gap-4 sm:grid-cols-2 items-end border p-4 rounded-md">
-                  <div className="space-y-2">
-                    <Label htmlFor={`playerName-${index}`}>Player Name</Label>
-                    <Input
-                      id={`playerName-${index}`}
-                      value={player.name}
-                      onChange={(e) => updatePlayer(index, "name", e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={`playerPosition-${index}`}>Position</Label>
-                    <Input
-                      id={`playerPosition-${index}`}
-                      value={player.position}
-                      onChange={(e) => updatePlayer(index, "position", e.target.value)}
-                    />
-                  </div>
-                  {players.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="sm:col-span-2 w-8 h-8 ml-auto"
-                      onClick={() => removePlayer(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                value={formData.confirmPassword}
+                onChange={handleInputChange}
+                required
+              />
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Submitting..." : "Submit Registration"}
+              {loading ? "Creating account..." : "Register"}
             </Button>
+            <div className="text-sm text-muted-foreground text-center">
+              Already have an account?{" "}
+              <Link href="/login" className="text-primary hover:underline">
+                Login
+              </Link>
+            </div>
           </CardFooter>
         </form>
       </Card>

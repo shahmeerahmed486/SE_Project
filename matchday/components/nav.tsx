@@ -1,49 +1,73 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
+import { Trophy } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Trophy, Users, Home } from "lucide-react"
+import { useAuthStatus } from "@/src/hooks/useAuthStatus"
+import { UserRole } from "@/types"
 
 export function Nav() {
-    const pathname = usePathname()
+    const { user, loading, logout } = useAuthStatus()
 
-    const links = [
-        { href: "/", label: "Home", icon: Home },
-        { href: "/tournaments", label: "Tournaments", icon: Trophy },
-        { href: "/teams", label: "Teams", icon: Users },
-    ]
+    const getDashboardLink = () => {
+        if (!user) return "/dashboard"
+        switch (user.role) {
+            case UserRole.ADMIN:
+                return "/admin/dashboard"
+            case UserRole.MANAGEMENT:
+                return "/management/dashboard"
+            case UserRole.CAPTAIN:
+                return "/captain/dashboard"
+            default:
+                return "/dashboard"
+        }
+    }
+
+    const handleLogout = () => {
+        logout()
+    }
 
     return (
-        <nav className="border-b">
+        <header className="w-full border-b bg-background">
             <div className="container flex h-16 items-center justify-between">
-                <div className="flex items-center gap-6">
-                    {links.map(({ href, label, icon: Icon }) => {
-                        const isActive = pathname === href
-                        return (
-                            <Link
-                                key={href}
-                                href={href}
-                                className={cn(
-                                    "flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary",
-                                    isActive
-                                        ? "text-primary"
-                                        : "text-muted-foreground"
-                                )}
-                            >
-                                <Icon className="h-4 w-4" />
-                                {label}
-                            </Link>
-                        )
-                    })}
+                <div className="flex items-center gap-2">
+                    <Link href="/" className="flex items-center gap-2">
+                        <Trophy className="h-6 w-6" />
+                        <span className="text-xl font-bold">Matchday</span>
+                    </Link>
+                    <nav className="ml-8 hidden md:flex gap-6">
+                        <Link href="/tournaments" className="text-sm font-medium hover:underline">
+                            Tournaments
+                        </Link>
+                        <Link href="/teams" className="text-sm font-medium hover:underline">
+                            Teams
+                        </Link>
+                    </nav>
                 </div>
                 <div className="flex items-center gap-4">
-                    <Link href="/login">
-                        <Button variant="outline">Login</Button>
-                    </Link>
+                    {user && !loading && (
+                        <>
+                            <span className="text-sm text-muted-foreground">
+                                {user.username}
+                            </span>
+                            <Link href={getDashboardLink()}>
+                                <Button variant="ghost">Dashboard</Button>
+                            </Link>
+                        </>
+                    )}
+                    {!loading && (
+                        user ? (
+                            <Button variant="outline" onClick={handleLogout}>
+                                Logout
+                            </Button>
+                        ) : (
+                            <Link href="/login">
+                                <Button>Login</Button>
+                            </Link>
+                        )
+                    )}
                 </div>
             </div>
-        </nav>
+        </header>
     )
 } 

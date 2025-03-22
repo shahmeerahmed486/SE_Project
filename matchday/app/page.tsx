@@ -1,6 +1,6 @@
-import Link from "next/link"
+import { Trophy, Calendar, Users, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Trophy, Calendar, Users, Shield, ArrowRight } from "lucide-react"
+import Link from "next/link"
 
 export default function Home() {
   return (
@@ -21,11 +21,10 @@ export default function Home() {
                   <Link href="/tournaments">
                     <Button>
                       View Tournaments
-                      <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </Link>
-                  <Link href="/register">
-                    <Button variant="outline">Register Your Team</Button>
+                  <Link href="/teams">
+                    <Button variant="outline">View Teams</Button>
                   </Link>
                 </div>
               </div>
@@ -37,6 +36,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+
         <section className="w-full py-12 md:py-24 lg:py-32">
           <div className="container px-4 md:px-6">
             <div className="flex flex-col items-center justify-center space-y-4 text-center">
