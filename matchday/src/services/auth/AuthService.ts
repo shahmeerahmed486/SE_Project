@@ -38,6 +38,7 @@ export class AuthService {
             };
 
             await setDoc(doc(db, 'users', user.id), user);
+            localStorage.setItem('userId', user.id);
             return user;
         } catch (error: any) {
             throw new Error(error.message);
@@ -82,11 +83,21 @@ export class AuthService {
     }
 
     static async getCurrentUser(): Promise<User | null> {
-        const userId = localStorage.getItem('userId');
-        if (!userId) return null;
+        try {
+            const userId = localStorage.getItem('userId');
+            if (!userId) return null;
 
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        return userDoc.exists() ? userDoc.data() as User : null;
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (!userDoc.exists()) {
+                localStorage.removeItem('userId');
+                return null;
+            }
+            return userDoc.data() as User;
+        } catch (error) {
+            console.error('Error getting current user:', error);
+            localStorage.removeItem('userId');
+            return null;
+        }
     }
 
     static onAuthStateChange(callback: (user: User | null) => void) {
@@ -101,6 +112,10 @@ export class AuthService {
             }
         };
 
+        // Initial check
+        handleStorageChange();
+
+        // Listen for storage changes
         window.addEventListener('storage', handleStorageChange);
         return () => window.removeEventListener('storage', handleStorageChange);
     }

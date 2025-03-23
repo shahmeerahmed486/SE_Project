@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Users, MapPin, ArrowLeft, Trophy, Info, Shield, Award, Clock } from "lucide-react"
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from '@/src/firebase/config'
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import TeamRegistrationForm from '@/components/tournament/TeamRegistrationForm'
 import {
   Dialog,
@@ -20,6 +20,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { format } from "date-fns"
+import { AnnouncementList } from '@/src/components/announcement/AnnouncementList'
+import { useAuth } from '@/src/hooks/useAuth'
+import { UserRole, TournamentStatus, Team as TeamType } from '@/src/types'
+import { toast } from "@/components/ui/use-toast"
+import { addDoc, collection } from 'firebase/firestore'
+import { TeamService } from '@/src/services/team/TeamService'
+import Cookies from 'js-cookie'
 
 interface Tournament {
   id: string
@@ -29,18 +36,12 @@ interface Tournament {
   endDate: string
   location: string
   format: string
-  status: string
+  status: TournamentStatus
   teamCount: number
   maxTeams: number
   rules: string[]
   prizes: string[]
-  registrationStatus: string
-}
-
-interface Team {
-  id: string
-  name: string
-  captainName: string
+  registrationDeadline?: string
 }
 
 interface Match {
@@ -55,44 +56,116 @@ interface Match {
   scoreB?: number
 }
 
+interface FormData {
+  teamName: string;
+  teamLogo: File | null;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  players: {
+    name: string;
+    position: string;
+    number: string;
+  }[];
+}
+
 export default function TournamentDetailsPage() {
   const params = useParams()
   const tournamentId = params?.id as string
   const [tournament, setTournament] = useState<Tournament | null>(null)
-  const [teams, setTeams] = useState<Team[]>([])
+  const [teams, setTeams] = useState<TeamType[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
   const [showRegistrationForm, setShowRegistrationForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { user, loading: authLoading } = useAuth()
 
   useEffect(() => {
-    const fetchTournamentData = async () => {
+    // Debug log to check user role
+    console.log('Auth loading:', authLoading)
+    console.log('Current user:', user)
+    console.log('User role:', user?.role)
+    console.log('Token:', Cookies.get('token'))
+  }, [user, authLoading])
+
+  useEffect(() => {
+    const fetchData = async () => {
       if (!tournamentId) return
 
       try {
+        // Fetch tournament details
         const tournamentDoc = await getDoc(doc(db, 'tournaments', tournamentId))
         if (tournamentDoc.exists()) {
           setTournament({ id: tournamentDoc.id, ...tournamentDoc.data() } as Tournament)
-        } else {
-          setError('Tournament not found')
         }
+
+        // Fetch teams
+        const teamsData = await TeamService.getTeamsByTournament(tournamentId)
+        setTeams(teamsData)
       } catch (error) {
-        console.error('Error fetching tournament:', error)
-        setError('Failed to load tournament details')
+        console.error('Error fetching data:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load tournament details",
+          variant: "destructive",
+        })
       } finally {
         setLoading(false)
       }
     }
 
-    fetchTournamentData()
+    fetchData()
   }, [tournamentId])
 
-  const handleRegistration = async (data: any) => {
-    // Implement team registration logic here
-    console.log('Registration data:', data)
+  const handleRegistration = async (data: {
+    teamName: string;
+    players: {
+      name: string;
+      position: string;
+      number: string;
+    }[];
+  }) => {
+    try {
+      if (!user || user.role !== "CAPTAIN") {
+        toast({
+          title: "Unauthorized",
+          description: "Only team captains can register teams",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const teamData: Omit<TeamType, 'id'> = {
+        name: data.teamName,
+        tournamentId,
+        captainId: user.id,
+        players: data.players,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      await TeamService.createTeam(teamData)
+
+      toast({
+        title: "Success",
+        description: "Team registered successfully!",
+      })
+
+      setShowRegistrationForm(false)
+      // Refresh teams list
+      const updatedTeams = await TeamService.getTeamsByTournament(tournamentId)
+      setTeams(updatedTeams)
+    } catch (error: any) {
+      console.error('Error registering team:', error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to register team",
+        variant: "destructive",
+      })
+    }
   }
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="container flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -121,7 +194,7 @@ export default function TournamentDetailsPage() {
           <span>Back to Tournaments</span>
         </Link>
         <div className="h-4 w-px bg-border" />
-        <Badge variant={tournament.status === 'active' ? 'default' : 'secondary'}>
+        <Badge variant={tournament.status === TournamentStatus.REGISTRATION_OPEN ? 'default' : 'secondary'}>
           {tournament.status}
         </Badge>
       </div>
@@ -173,10 +246,6 @@ export default function TournamentDetailsPage() {
                   <Trophy className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Format: {tournament.format}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Registration: {tournament.registrationStatus}</span>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -199,17 +268,14 @@ export default function TournamentDetailsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Prizes</CardTitle>
+              <CardTitle>Announcements</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {tournament.prizes.map((prize, index) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <Award className="h-4 w-4 text-primary mt-0.5" />
-                    <span className="text-sm">{prize}</span>
-                  </li>
-                ))}
-              </ul>
+              <AnnouncementList
+                tournamentId={tournamentId}
+                isAdmin={user?.role === UserRole.ADMIN}
+                currentUserId={user?.id || ''}
+              />
             </CardContent>
           </Card>
         </div>
@@ -220,24 +286,44 @@ export default function TournamentDetailsPage() {
               <CardTitle>Registration</CardTitle>
             </CardHeader>
             <CardContent>
-              {tournament.registrationStatus === 'open' ? (
+              {tournament?.status === TournamentStatus.REGISTRATION_OPEN ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Clock className="h-4 w-4" />
                     <span>Spots remaining: {tournament.maxTeams - tournament.teamCount}</span>
                   </div>
-                  <Button
-                    className="w-full"
-                    onClick={() => setShowRegistrationForm(true)}
-                    disabled={tournament.teamCount >= tournament.maxTeams}
-                  >
-                    Register Your Team
-                  </Button>
+                  {user && user.role === "CAPTAIN" ? (
+                    <Dialog open={showRegistrationForm} onOpenChange={setShowRegistrationForm}>
+                      <DialogTrigger asChild>
+                        <Button className="w-full">
+                          Register Team
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Register Your Team</DialogTitle>
+                          <DialogDescription>
+                            Fill in the details to register your team for this tournament.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <TeamRegistrationForm
+                          tournamentId={tournamentId}
+                          maxPlayers={11}
+                          minPlayers={5}
+                          onClose={() => setShowRegistrationForm(false)}
+                          onSubmit={handleRegistration}
+                        />
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      {!user ? "Please sign in to register your team." : "Only team captains can register teams."}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-                  <Info className="h-4 w-4" />
-                  <span>Registration is currently closed for this tournament.</span>
+                <div className="text-sm text-muted-foreground">
+                  Registration is currently closed.
                 </div>
               )}
             </CardContent>
@@ -313,7 +399,7 @@ export default function TournamentDetailsPage() {
                   {teams.map((team) => (
                     <div key={team.id} className="grid grid-cols-3 items-center px-4 py-3">
                       <div className="col-span-2 font-medium">{team.name}</div>
-                      <div>{team.captainName}</div>
+                      <div>{user?.id === team.captainId ? 'You' : 'Captain'}</div>
                     </div>
                   ))}
                 </div>
@@ -322,16 +408,6 @@ export default function TournamentDetailsPage() {
           </Tabs>
         </div>
       </div>
-
-      {showRegistrationForm && (
-        <TeamRegistrationForm
-          tournamentId={tournament.id}
-          maxPlayers={20}
-          minPlayers={11}
-          onClose={() => setShowRegistrationForm(false)}
-          onSubmit={handleRegistration}
-        />
-      )}
     </div>
   )
 }

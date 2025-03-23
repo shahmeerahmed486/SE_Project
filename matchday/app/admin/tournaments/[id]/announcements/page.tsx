@@ -4,8 +4,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { collection, query, where, orderBy, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore"
-import { db, auth } from "@/lib/firebase"
-import { onAuthStateChanged } from "firebase/auth"
+import { db } from "@/lib/firebase"
+import { getAuth, onAuthStateChanged } from "firebase/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,23 +17,24 @@ import { Trophy, Edit, Trash2, ArrowLeft, MessageSquare, AlertTriangle } from "l
 import { useToast } from "@/components/ui/use-toast"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
-import { Announcement, Tournament } from "@/types"
+import { Announcement, Tournament } from "@/src/types"
 
 export default function AnnouncementsPage({ params }: { params: { id: string } }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  
+
   // Form fields
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [priority, setPriority] = useState<"low" | "medium" | "high">("low")
   const [announcementId, setAnnouncementId] = useState("")
   const [isEditing, setIsEditing] = useState(false)
-  
+
   const router = useRouter()
   const { toast } = useToast()
+  const auth = getAuth()
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -54,7 +55,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
       try {
         // Get tournament
         const tournamentDoc = await getDoc(doc(db, "tournaments", params.id))
-        
+
         if (!tournamentDoc.exists()) {
           toast({
             title: "Tournament not found",
@@ -64,30 +65,29 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
           router.push("/admin/tournaments")
           return
         }
-        
+
         const tournamentData = tournamentDoc.data()
         setTournament({
           id: tournamentDoc.id,
           ...tournamentData
         } as Tournament)
-        
+
         // Get announcements for this tournament
         const announcementsQuery = query(
-          collection(db, "announcements"), 
-          where("tournamentId", "==", params.id),
-          orderBy("createdAt", "desc")
+          collection(db, "tournaments", params.id, "announcements"),
+          orderBy("timestamp", "desc")
         )
-        
+
         const announcementsSnapshot = await getDocs(announcementsQuery)
         const announcementsData: Announcement[] = []
-        
+
         announcementsSnapshot.forEach((doc) => {
           announcementsData.push({
             id: doc.id,
             ...doc.data()
           } as Announcement)
         })
-        
+
         setAnnouncements(announcementsData)
       } catch (error) {
         console.error("Error fetching data:", error)
@@ -103,7 +103,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
 
     fetchData()
   }, [user, params.id, router, toast])
-  
+
   const resetForm = () => {
     setTitle("")
     setContent("")
@@ -111,7 +111,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
     setAnnouncementId("")
     setIsEditing(false)
   }
-  
+
   const handleEditAnnouncement = (announcement: Announcement) => {
     setTitle(announcement.title)
     setContent(announcement.content)
@@ -119,42 +119,44 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
     setAnnouncementId(announcement.id)
     setIsEditing(true)
   }
-  
+
   const handleCreateAnnouncement = async () => {
     try {
-      const announcementData = {
+      const announcementData: Omit<Announcement, "id"> = {
         tournamentId: params.id,
         title,
         content,
+        description: content, // Using content as description for backward compatibility
         priority,
+        timestamp: new Date().toISOString(),
         createdBy: user.uid,
         createdAt: serverTimestamp(),
+        updatedAt: new Date().toISOString()
       }
-      
-      await addDoc(collection(db, "announcements"), announcementData)
-      
+
+      await addDoc(collection(db, "tournaments", params.id, "announcements"), announcementData)
+
       toast({
         title: "Announcement created",
         description: "The announcement has been published.",
       })
-      
+
       // Refresh announcements
       const announcementsQuery = query(
-        collection(db, "announcements"), 
-        where("tournamentId", "==", params.id),
-        orderBy("createdAt", "desc")
+        collection(db, "tournaments", params.id, "announcements"),
+        orderBy("timestamp", "desc")
       )
-      
+
       const announcementsSnapshot = await getDocs(announcementsQuery)
       const announcementsData: Announcement[] = []
-      
+
       announcementsSnapshot.forEach((doc) => {
         announcementsData.push({
           id: doc.id,
           ...doc.data()
         } as Announcement)
       })
-      
+
       setAnnouncements(announcementsData)
       resetForm()
     } catch (error) {
@@ -166,41 +168,40 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
       })
     }
   }
-  
+
   const handleUpdateAnnouncement = async () => {
     try {
-      const announcementData = {
+      const announcementData: Partial<Announcement> = {
         title,
         content,
+        description: content, // Using content as description for backward compatibility
         priority,
-        updatedBy: user.uid,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString()
       }
-      
-      await updateDoc(doc(db, "announcements", announcementId), announcementData)
-      
+
+      await updateDoc(doc(db, "tournaments", params.id, "announcements", announcementId), announcementData)
+
       toast({
         title: "Announcement updated",
         description: "The announcement has been updated successfully.",
       })
-      
+
       // Refresh announcements
       const announcementsQuery = query(
-        collection(db, "announcements"), 
-        where("tournamentId", "==", params.id),
-        orderBy("createdAt", "desc")
+        collection(db, "tournaments", params.id, "announcements"),
+        orderBy("timestamp", "desc")
       )
-      
+
       const announcementsSnapshot = await getDocs(announcementsQuery)
       const announcementsData: Announcement[] = []
-      
+
       announcementsSnapshot.forEach((doc) => {
         announcementsData.push({
           id: doc.id,
           ...doc.data()
         } as Announcement)
       })
-      
+
       setAnnouncements(announcementsData)
       resetForm()
     } catch (error) {
@@ -212,17 +213,17 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
       })
     }
   }
-  
+
   const handleDeleteAnnouncement = async (announcementId: string) => {
     if (confirm("Are you sure you want to delete this announcement?")) {
       try {
-        await deleteDoc(doc(db, "announcements", announcementId))
-        
+        await deleteDoc(doc(db, "tournaments", params.id, "announcements", announcementId))
+
         toast({
           title: "Announcement deleted",
           description: "The announcement has been deleted successfully.",
         })
-        
+
         // Update state to remove the deleted announcement
         setAnnouncements(announcements.filter(a => a.id !== announcementId))
       } catch (error) {
@@ -275,7 +276,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="content">Content</Label>
                 <Textarea
@@ -287,7 +288,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
                 <Select value={priority} onValueChange={(value: "low" | "medium" | "high") => setPriority(value)}>
@@ -301,7 +302,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="flex gap-2">
                 {isEditing ? (
                   <>
@@ -321,7 +322,7 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
             </div>
           </CardContent>
         </Card>
-        
+
         {/* Announcements List */}
         <Card>
           <CardHeader>
@@ -340,8 +341,8 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
                       <div className="flex items-center gap-3">
                         <h3 className="font-semibold text-lg">{announcement.title}</h3>
                         <Badge variant={
-                          announcement.priority === "high" ? "destructive" : 
-                          announcement.priority === "medium" ? "secondary" : "default"
+                          announcement.priority === "high" ? "destructive" :
+                            announcement.priority === "medium" ? "secondary" : "default"
                         }>
                           {announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)} Priority
                         </Badge>
@@ -365,9 +366,9 @@ export default function AnnouncementsPage({ params }: { params: { id: string } }
                     </div>
                     <p className="whitespace-pre-line">{announcement.content}</p>
                     <div className="text-sm text-muted-foreground mt-2">
-                      Posted on {announcement.createdAt?.toDate ? 
-                        format(announcement.createdAt.toDate(), 'MMM dd, yyyy - HH:mm') : 
-                        "Just now"}
+                      Posted on {announcement.createdAt?.toDate ?
+                        format(announcement.createdAt.toDate(), 'MMM dd, yyyy - HH:mm') :
+                        format(new Date(announcement.timestamp), 'MMM dd, yyyy - HH:mm')}
                     </div>
                   </div>
                 ))}

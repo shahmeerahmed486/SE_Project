@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Plus, Trash2 } from 'lucide-react';
 import { validateEmail, validatePhone } from '@/lib/utils';
 
 interface TeamRegistrationFormProps {
@@ -9,115 +12,78 @@ interface TeamRegistrationFormProps {
     maxPlayers: number;
     minPlayers: number;
     onClose: () => void;
-    onSubmit: (data: any) => Promise<void>;
-}
-
-interface Player {
-    name: string;
-    position: string;
-    number: string;
-}
-
-interface FormData {
-    teamName: string;
-    teamLogo: File | null;
-    contactName: string;
-    contactEmail: string;
-    contactPhone: string;
-    players: Player[];
+    onSubmit: (data: {
+        teamName: string;
+        players: {
+            name: string;
+            position: string;
+            number: string;
+        }[];
+    }) => void;
 }
 
 export default function TeamRegistrationForm({
     tournamentId,
-    maxPlayers = 20,
-    minPlayers = 11,
+    maxPlayers,
+    minPlayers,
     onClose,
     onSubmit
 }: TeamRegistrationFormProps) {
-    const [step, setStep] = useState(1);
+    const [teamName, setTeamName] = useState('');
+    const [players, setPlayers] = useState([
+        { name: '', position: '', number: '' }
+    ]);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [formData, setFormData] = useState<FormData>({
-        teamName: '',
-        teamLogo: null,
-        contactName: '',
-        contactEmail: '',
-        contactPhone: '',
-        players: Array(minPlayers).fill('').map(() => ({
-            name: '',
-            position: '',
-            number: ''
-        }))
-    });
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const validateStep1 = () => {
-        const newErrors: Record<string, string> = {};
-
-        if (!formData.teamName.trim()) {
-            newErrors.teamName = 'Team name is required';
-        }
-
-        if (!formData.contactName.trim()) {
-            newErrors.contactName = 'Contact name is required';
-        }
-
-        if (!formData.contactEmail.trim()) {
-            newErrors.contactEmail = 'Email is required';
-        } else if (!validateEmail(formData.contactEmail)) {
-            newErrors.contactEmail = 'Invalid email format';
-        }
-
-        if (!formData.contactPhone.trim()) {
-            newErrors.contactPhone = 'Phone number is required';
-        } else if (!validatePhone(formData.contactPhone)) {
-            newErrors.contactPhone = 'Invalid phone number format';
-        }
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const validateStep2 = () => {
-        const newErrors: Record<string, string> = {};
-        const filledPlayers = formData.players.filter(p => p.name.trim());
-
-        if (filledPlayers.length < minPlayers) {
-            newErrors.players = `Minimum ${minPlayers} players required`;
-        }
-
-        formData.players.forEach((player, index) => {
-            if (player.name.trim() && !player.position.trim()) {
-                newErrors[`player${index}position`] = 'Position is required';
-            }
-            if (player.name.trim() && !player.number.trim()) {
-                newErrors[`player${index}number`] = 'Number is required';
-            }
-        });
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const handleNext = () => {
-        if (step === 1 && validateStep1()) {
-            setStep(2);
+    const addPlayer = () => {
+        if (players.length < maxPlayers) {
+            setPlayers([...players, { name: '', position: '', number: '' }]);
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const removePlayer = (index: number) => {
+        if (players.length > minPlayers) {
+            setPlayers(players.filter((_, i) => i !== index));
+        }
+    };
+
+    const updatePlayer = (index: number, field: 'name' | 'position' | 'number', value: string) => {
+        const newPlayers = [...players];
+        newPlayers[index] = { ...newPlayers[index], [field]: value };
+        setPlayers(newPlayers);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (step === 2 && validateStep2()) {
-            setIsSubmitting(true);
-            try {
-                await onSubmit(formData);
-                onClose();
-            } catch (error) {
-                console.error('Error submitting form:', error);
-                setErrors({ submit: 'Failed to submit registration. Please try again.' });
-            } finally {
-                setIsSubmitting(false);
-            }
+        // Validate form
+        if (!teamName.trim()) {
+            alert('Please enter a team name');
+            return;
+        }
+
+        if (players.length < minPlayers) {
+            alert(`Please add at least ${minPlayers} players`);
+            return;
+        }
+
+        if (players.some(player => !player.name.trim() || !player.position.trim() || !player.number.trim())) {
+            alert('Please fill in all player details');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            onSubmit({
+                teamName,
+                players,
+            });
+        } catch (error) {
+            console.error('Error submitting form:', error);
+            setErrors({ submit: 'Failed to submit registration. Please try again.' });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -137,196 +103,86 @@ export default function TeamRegistrationForm({
                             </svg>
                         </Button>
                     </div>
-
-                    <div className="flex justify-center mt-4">
-                        <div className="flex items-center">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 1 ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
-                                }`}>
-                                1
-                            </div>
-                            <div className={`w-16 h-1 ${step === 2 ? 'bg-blue-600' : 'bg-blue-100'
-                                }`}></div>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 2 ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
-                                }`}>
-                                2
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6">
-                    {step === 1 ? (
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Team Name *</label>
-                                <input
-                                    type="text"
-                                    value={formData.teamName}
-                                    onChange={e => setFormData({ ...formData, teamName: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                    placeholder="Enter team name"
-                                />
-                                {errors.teamName && (
-                                    <p className="text-red-500 text-sm mt-1">{errors.teamName}</p>
-                                )}
-                            </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                    <div className="space-y-2">
+                        <Label htmlFor="teamName">Team Name</Label>
+                        <Input
+                            id="teamName"
+                            value={teamName}
+                            onChange={(e) => setTeamName(e.target.value)}
+                            required
+                        />
+                    </div>
 
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Team Logo</label>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={e => setFormData({ ...formData, teamLogo: e.target.files?.[0] || null })}
-                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Contact Name *</label>
-                                <input
-                                    type="text"
-                                    value={formData.contactName}
-                                    onChange={e => setFormData({ ...formData, contactName: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                    placeholder="Enter contact person's name"
-                                />
-                                {errors.contactName && (
-                                    <p className="text-red-500 text-sm mt-1">{errors.contactName}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Contact Email *</label>
-                                <input
-                                    type="email"
-                                    value={formData.contactEmail}
-                                    onChange={e => setFormData({ ...formData, contactEmail: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                    placeholder="Enter contact email"
-                                />
-                                {errors.contactEmail && (
-                                    <p className="text-red-500 text-sm mt-1">{errors.contactEmail}</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium mb-2">Contact Phone *</label>
-                                <input
-                                    type="tel"
-                                    value={formData.contactPhone}
-                                    onChange={e => setFormData({ ...formData, contactPhone: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                    placeholder="Enter contact phone number"
-                                />
-                                {errors.contactPhone && (
-                                    <p className="text-red-500 text-sm mt-1">{errors.contactPhone}</p>
-                                )}
-                            </div>
-
-                            <div className="flex justify-between pt-4">
-                                <Button variant="outline" onClick={onClose}>
-                                    Cancel
-                                </Button>
-                                <Button onClick={handleNext}>
-                                    Next
-                                </Button>
-                            </div>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <Label>Players</Label>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addPlayer}
+                                disabled={players.length >= maxPlayers}
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Player
+                            </Button>
                         </div>
-                    ) : (
-                        <div>
-                            <h3 className="text-lg font-medium mb-4">Player Information</h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                Minimum {minPlayers} players required. You can add up to {maxPlayers} players.
-                            </p>
 
-                            {errors.players && (
-                                <p className="text-red-500 text-sm mb-4">{errors.players}</p>
-                            )}
-
-                            <div className="space-y-4">
-                                {formData.players.map((player, index) => (
-                                    <div key={index} className="grid grid-cols-3 gap-4">
-                                        <div>
-                                            <input
-                                                type="text"
-                                                value={player.name}
-                                                onChange={e => {
-                                                    const newPlayers = [...formData.players];
-                                                    newPlayers[index].name = e.target.value;
-                                                    setFormData({ ...formData, players: newPlayers });
-                                                }}
-                                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                                placeholder="Player name"
-                                            />
-                                        </div>
-                                        <div>
-                                            <input
-                                                type="text"
-                                                value={player.position}
-                                                onChange={e => {
-                                                    const newPlayers = [...formData.players];
-                                                    newPlayers[index].position = e.target.value;
-                                                    setFormData({ ...formData, players: newPlayers });
-                                                }}
-                                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                                placeholder="Position"
-                                            />
-                                            {errors[`player${index}position`] && (
-                                                <p className="text-red-500 text-sm mt-1">{errors[`player${index}position`]}</p>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <input
-                                                type="text"
-                                                value={player.number}
-                                                onChange={e => {
-                                                    const newPlayers = [...formData.players];
-                                                    newPlayers[index].number = e.target.value;
-                                                    setFormData({ ...formData, players: newPlayers });
-                                                }}
-                                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
-                                                placeholder="Number"
-                                            />
-                                            {errors[`player${index}number`] && (
-                                                <p className="text-red-500 text-sm mt-1">{errors[`player${index}number`]}</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-
-                                {formData.players.length < maxPlayers && (
+                        {players.map((player, index) => (
+                            <div key={index} className="grid grid-cols-4 gap-4 items-start">
+                                <div className="space-y-2">
+                                    <Label>Name</Label>
+                                    <Input
+                                        value={player.name}
+                                        onChange={(e) => updatePlayer(index, 'name', e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Position</Label>
+                                    <Input
+                                        value={player.position}
+                                        onChange={(e) => updatePlayer(index, 'position', e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Number</Label>
+                                    <Input
+                                        value={player.number}
+                                        onChange={(e) => updatePlayer(index, 'number', e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div className="pt-8">
                                     <Button
                                         type="button"
-                                        variant="outline"
-                                        onClick={() => {
-                                            setFormData({
-                                                ...formData,
-                                                players: [
-                                                    ...formData.players,
-                                                    { name: '', position: '', number: '' }
-                                                ]
-                                            });
-                                        }}
-                                        className="w-full"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removePlayer(index)}
+                                        disabled={players.length <= minPlayers}
                                     >
-                                        Add Player
+                                        <Trash2 className="h-4 w-4" />
                                     </Button>
-                                )}
+                                </div>
                             </div>
+                        ))}
+                    </div>
 
-                            <div className="flex justify-between mt-6">
-                                <Button type="button" variant="outline" onClick={() => setStep(1)}>
-                                    Back
-                                </Button>
-                                <Button type="submit" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Submitting...' : 'Submit Registration'}
-                                </Button>
-                            </div>
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={onClose}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? 'Submitting...' : 'Register Team'}
+                        </Button>
+                    </div>
 
-                            {errors.submit && (
-                                <p className="text-red-500 text-sm mt-4 text-center">{errors.submit}</p>
-                            )}
-                        </div>
+                    {errors.submit && (
+                        <p className="text-red-500 text-sm mt-4 text-center">{errors.submit}</p>
                     )}
                 </form>
             </div>
