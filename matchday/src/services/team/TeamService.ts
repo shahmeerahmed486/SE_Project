@@ -18,6 +18,18 @@ export class TeamService {
                 throw new Error('Tournament is full');
             }
 
+            // Check if captain already has a team in this tournament
+            const existingTeamQuery = query(
+                collection(db, 'teams'),
+                where('tournamentId', '==', teamData.tournamentId),
+                where('captainId', '==', teamData.captainId)
+            );
+            const existingTeamSnapshot = await getDocs(existingTeamQuery);
+
+            if (!existingTeamSnapshot.empty) {
+                throw new Error('You already have a team registered in this tournament');
+            }
+
             // Create team
             const teamRef = await addDoc(collection(db, 'teams'), teamData);
 

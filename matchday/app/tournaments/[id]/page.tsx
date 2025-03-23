@@ -79,6 +79,7 @@ export default function TournamentDetailsPage() {
   const [showRegistrationForm, setShowRegistrationForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { user, loading: authLoading } = useAuth()
+  const [hasRegisteredTeam, setHasRegisteredTeam] = useState(false)
 
   useEffect(() => {
     // Debug log to check user role
@@ -91,6 +92,7 @@ export default function TournamentDetailsPage() {
   useEffect(() => {
     const fetchData = async () => {
       if (!tournamentId) return
+      setLoading(true)
 
       try {
         // Fetch tournament details
@@ -102,6 +104,12 @@ export default function TournamentDetailsPage() {
         // Fetch teams
         const teamsData = await TeamService.getTeamsByTournament(tournamentId)
         setTeams(teamsData)
+
+        // Check if current user (captain) already has a team
+        if (user?.role === "CAPTAIN") {
+          const hasTeam = teamsData.some(team => team.captainId === user.id)
+          setHasRegisteredTeam(hasTeam)
+        }
       } catch (error) {
         console.error('Error fetching data:', error)
         toast({
@@ -114,8 +122,11 @@ export default function TournamentDetailsPage() {
       }
     }
 
-    fetchData()
-  }, [tournamentId])
+    // Only fetch when auth is done loading
+    if (!authLoading) {
+      fetchData()
+    }
+  }, [tournamentId, user, authLoading])
 
   const handleRegistration = async (data: {
     teamName: string;
@@ -293,28 +304,34 @@ export default function TournamentDetailsPage() {
                     <span>Spots remaining: {tournament.maxTeams - tournament.teamCount}</span>
                   </div>
                   {user && user.role === "CAPTAIN" ? (
-                    <Dialog open={showRegistrationForm} onOpenChange={setShowRegistrationForm}>
-                      <DialogTrigger asChild>
-                        <Button className="w-full">
-                          Register Team
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Register Your Team</DialogTitle>
-                          <DialogDescription>
-                            Fill in the details to register your team for this tournament.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <TeamRegistrationForm
-                          tournamentId={tournamentId}
-                          maxPlayers={11}
-                          minPlayers={5}
-                          onClose={() => setShowRegistrationForm(false)}
-                          onSubmit={handleRegistration}
-                        />
-                      </DialogContent>
-                    </Dialog>
+                    hasRegisteredTeam ? (
+                      <div className="text-sm text-muted-foreground">
+                        You already have a team registered in this tournament.
+                      </div>
+                    ) : (
+                      <Dialog open={showRegistrationForm} onOpenChange={setShowRegistrationForm}>
+                        <DialogTrigger asChild>
+                          <Button className="w-full">
+                            Register Team
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Register Your Team</DialogTitle>
+                            <DialogDescription>
+                              Fill in the details to register your team for this tournament.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <TeamRegistrationForm
+                            tournamentId={tournamentId}
+                            maxPlayers={11}
+                            minPlayers={5}
+                            onClose={() => setShowRegistrationForm(false)}
+                            onSubmit={handleRegistration}
+                          />
+                        </DialogContent>
+                      </Dialog>
+                    )
                   ) : (
                     <div className="text-sm text-muted-foreground">
                       {!user ? "Please sign in to register your team." : "Only team captains can register teams."}
