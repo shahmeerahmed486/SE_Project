@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Tournament, User, UserRole, ManagementUser, Announcement, TournamentStatus, ManagementTeam } from "@/src/types"
+import { Tournament, User, UserRole, Announcement, TournamentStatus, ManagementUser } from "@/src/types"
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, arrayRemove, addDoc, deleteDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { AuthService } from "@/src/api/services/AuthService"
@@ -26,12 +26,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+interface AuthResult {
+  user: {
+    id: string
+    email: string
+    username: string
+    role: UserRole
+  }
+  token: string
+}
+
+interface UserCreate {
+  email: string
+  password: string
+  username: string
+}
+
 export default function AdminDashboard() {
   const { user, loading } = useAuthStatus()
   const router = useRouter()
   const { toast } = useToast()
   const [tournaments, setTournaments] = useState<Tournament[]>([])
-  const [managementUsers, setManagementUsers] = useState<User[]>([])
+  const [managementUsers, setManagementUsers] = useState<ManagementUser[]>([])
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null)
   const [newRule, setNewRule] = useState("")
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null)
@@ -56,8 +72,7 @@ export default function AdminDashboard() {
     maxTeams: 16
   })
 
-  // States from both versions
-  const [selectedManagementUser, setSelectedManagementUser] = useState<ManagementTeam | null>(null)
+  const [selectedManagementUser, setSelectedManagementUser] = useState<ManagementUser | null>(null)
   const [assignableTournaments, setAssignableTournaments] = useState<Tournament[]>([])
   const [showAnnouncementDialog, setShowAnnouncementDialog] = useState(false)
   const [selectedTournamentForAnnouncement, setSelectedTournamentForAnnouncement] = useState<Tournament | null>(null)
@@ -66,26 +81,6 @@ export default function AdminDashboard() {
     description: ""
   })
   const [showEditTournamentDialog, setShowEditTournamentDialog] = useState(false)
-
-  // Check authentication and role
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
-      if (user.role !== UserRole.ADMIN) {
-        toast({
-          title: "Unauthorized",
-          description: "You must be an admin to access this page",
-          variant: "destructive"
-        })
-        router.push('/')
-        return
-      }
-    }
-  }, [user, loading, router, toast])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -112,8 +107,9 @@ export default function AdminDashboard() {
         const managementUsersSnapshot = await getDocs(managementUsersQuery)
         const managementUsersData = managementUsersSnapshot.docs.map(doc => ({
           id: doc.id,
-          ...doc.data()
-        })) as User[]
+          ...doc.data(),
+          assignedTournaments: doc.data().assignedTournaments || []
+        })) as ManagementUser[]
         setManagementUsers(managementUsersData)
       } catch (error) {
         console.error("Error fetching data:", error)
@@ -125,17 +121,30 @@ export default function AdminDashboard() {
       }
     }
 
-    fetchData()
-  }, [user, loading, router, toast])
+    if (!loading && user?.role === UserRole.ADMIN) {
+      fetchData()
+    }
+  }, [user, loading, toast])
 
   const handleCreateManagementUser = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await AuthService.createManagementUser({
+      const result = (await AuthService.createManagementUser({
         email: newUser.email,
         password: newUser.password,
         username: newUser.username
-      })
+      } as UserCreate)) as unknown as AuthResult
+
+      // After creation, update the user document with assignedTournaments
+      if (result && result.user.id) {
+        const userRef = doc(db, "users", result.user.id)
+        await updateDoc(userRef, {
+          assignedTournaments: [],
+          role: UserRole.MANAGEMENT,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+      }
 
       toast({
         title: "Success",
@@ -158,8 +167,9 @@ export default function AdminDashboard() {
       const managementUsersSnapshot = await getDocs(managementUsersQuery)
       const managementUsersData = managementUsersSnapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
-      })) as User[]
+        ...doc.data(),
+        assignedTournaments: doc.data().assignedTournaments || []
+      })) as ManagementUser[]
       setManagementUsers(managementUsersData)
     } catch (error: any) {
       toast({
@@ -284,33 +294,23 @@ export default function AdminDashboard() {
   }
 
   // Management team assignment functions
-  const handleManageAssignments = async (user: ManagementTeam) => {
+  const handleManageAssignments = async (user: ManagementUser) => {
     setSelectedManagementUser(user)
     try {
-      // Fetch tournaments that are in DRAFT or REGISTRATION state
       const tournamentsSnapshot = await getDocs(collection(db, "tournaments"))
       const activeTournaments = tournamentsSnapshot.docs
         .map(doc => {
           const data = doc.data()
           return {
             id: doc.id,
-            name: data.name,
-            format: data.format,
-            startDate: data.startDate,
-            endDate: data.endDate,
-            registrationDeadline: data.registrationDeadline,
-            teamLimit: data.teamLimit,
-            status: data.status,
-            teamCount: data.teamCount,
-            managementTeam: data.managementTeam,
-            createdBy: data.createdBy,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-            rules: data.rules
+            ...data,
+            startDate: data.startDate ? new Date(data.startDate).toISOString() : null,
+            endDate: data.endDate ? new Date(data.endDate).toISOString() : null,
+            registrationDeadline: data.registrationDeadline ? new Date(data.registrationDeadline).toISOString() : null
           } as Tournament
         })
         .filter(tournament =>
-          tournament.status === TournamentStatus.DRAFT || tournament.status === TournamentStatus.REGISTRATION_OPEN
+          tournament.status === "DRAFT" || tournament.status === "REGISTRATION_OPEN"
         )
       setAssignableTournaments(activeTournaments)
     } catch (error) {
@@ -328,13 +328,15 @@ export default function AdminDashboard() {
 
     try {
       const userRef = doc(db, "users", selectedManagementUser.id)
-      const updatedAssignments = isAssigned
-        ? arrayUnion(tournamentId)
-        : arrayRemove(tournamentId)
-
-      await updateDoc(userRef, {
-        assignedTournaments: updatedAssignments
-      })
+      if (isAssigned) {
+        await updateDoc(userRef, {
+          assignedTournaments: arrayUnion(tournamentId)
+        })
+      } else {
+        await updateDoc(userRef, {
+          assignedTournaments: arrayRemove(tournamentId)
+        })
+      }
 
       // Update local state
       setManagementUsers(managementUsers.map(user =>
@@ -342,8 +344,8 @@ export default function AdminDashboard() {
           ? {
             ...user,
             assignedTournaments: isAssigned
-              ? [...(user as ManagementTeam).assignedTournaments, tournamentId]
-              : (user as ManagementTeam).assignedTournaments.filter(id => id !== tournamentId)
+              ? [...user.assignedTournaments, tournamentId]
+              : user.assignedTournaments.filter(id => id !== tournamentId)
           }
           : user
       ))
@@ -373,19 +375,14 @@ export default function AdminDashboard() {
     if (!selectedTournamentForAnnouncement || !newAnnouncement.title.trim() || !newAnnouncement.description.trim()) return
 
     try {
-      const announcement: Omit<Announcement, 'id'> = {
+      await addDoc(collection(db, "announcements"), {
         tournamentId: selectedTournamentForAnnouncement.id,
         title: newAnnouncement.title.trim(),
-        description: newAnnouncement.description.trim(),
         content: newAnnouncement.description.trim(),
-        priority: 'low',
-        timestamp: new Date().toISOString(),
-        createdBy: user?.id || '',
+        priority: "NORMAL",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      }
-
-      await addDoc(collection(db, "announcements"), announcement)
+      })
 
       toast({
         title: "Success",
@@ -578,7 +575,7 @@ export default function AdminDashboard() {
       <Tabs defaultValue="tournaments" className="space-y-6">
         <TabsList>
           <TabsTrigger value="tournaments">Tournaments</TabsTrigger>
-          <TabsTrigger value="users">Management Users</TabsTrigger>
+          <TabsTrigger value="management">Management Team</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tournaments" className="space-y-6">
@@ -756,48 +753,42 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-6">
+        <TabsContent value="management" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Create Management User</CardTitle>
+              <CardDescription>Add a new management team member</CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      value={newUser.username}
-                      onChange={(e) => setNewUser({
-                        ...newUser,
-                        username: e.target.value
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={newUser.email}
-                      onChange={(e) => setNewUser({
-                        ...newUser,
-                        email: e.target.value
-                      })}
-                    />
-                  </div>
+              <form onSubmit={handleCreateManagementUser} className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    required
+                  />
                 </div>
-                <div className="space-y-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    value={newUser.username}
+                    onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
                   <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
                     type="password"
                     value={newUser.password}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      password: e.target.value
-                    })}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    required
                   />
                 </div>
                 <Button type="submit">Create User</Button>
@@ -805,24 +796,24 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6">
+          <div className="grid gap-4">
             {managementUsers.map((user) => (
               <Card key={user.id}>
                 <CardHeader>
-                  <CardTitle>{user.name}</CardTitle>
+                  <CardTitle>{user.username}</CardTitle>
                   <CardDescription>{user.email}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between">
-                    <div className="space-y-1">
+                    <div>
                       <p className="text-sm font-medium">Assigned Tournaments</p>
                       <p className="text-sm text-muted-foreground">
-                        {(user as ManagementUser).assignedTournaments?.length || 0} tournaments
+                        {user.assignedTournaments?.length || 0} tournaments
                       </p>
                     </div>
                     <Button
                       variant="outline"
-                      onClick={() => handleManageAssignments(user as ManagementTeam)}
+                      onClick={() => handleManageAssignments(user)}
                     >
                       Manage Assignments
                     </Button>
