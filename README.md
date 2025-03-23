@@ -4,4 +4,4 @@
 
 [Trello Board](https://trello.com/b/cskYJvoH/seproject)
 
-[Burndown Chart](https://docs.google.com/spreadsheets/d/1ODVDwXn5SHQxNcReNVhjKWMuuB3rYFWhgCAE4t7E8sU/edit?usp=sharing)
+[Burndown Chart](https://docs.google.com/spreadsheets/d/1qaR893joSJNNdy9HajMXqUt9CweneIdUnt0cTzwtQSk/edit?usp=sharing)
