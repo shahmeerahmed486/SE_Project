@@ -8,13 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 import { Tournament, Team, UserRole } from "@/src/types"
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore"
+import { collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { Trophy, Users, Calendar, MapPin } from "lucide-react"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 
-export default function CaptainDashboard() {
+export default function Dashboard() {
     const { user, loading } = useAuthStatus()
     const router = useRouter()
     const { toast } = useToast()
@@ -26,47 +26,37 @@ export default function CaptainDashboard() {
             if (!user) return
 
             try {
-                // Fetch captain's active teams
-                const teamsQuery = query(
-                    collection(db, "teams"),
-                    where("captainId", "==", user.id)
-                )
-                const teamsSnapshot = await getDocs(teamsQuery)
-                const teamsData = teamsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })) as Team[]
-                setActiveTeams(teamsData)
-
-                // Fetch tournaments for each team
-                const tournamentIds = teamsData
-                    .map(team => team.tournamentId)
-                    .filter((id): id is string => id !== undefined && id !== null)
-
-                if (tournamentIds.length > 0) {
-                    // Get unique tournament IDs to avoid duplicates
-                    const uniqueTournamentIds = [...new Set(tournamentIds)]
-
-                    // Fetch each tournament document
-                    const tournamentPromises = uniqueTournamentIds.map(id =>
-                        getDoc(doc(db, "tournaments", id))
+                // Only fetch data if user is a captain
+                if (user.role === UserRole.CAPTAIN) {
+                    // Fetch captain's active teams
+                    const teamsQuery = query(
+                        collection(db, "teams"),
+                        where("captainId", "==", user.id)
                     )
+                    const teamsSnapshot = await getDocs(teamsQuery)
+                    const teamsData = teamsSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    })) as Team[]
+                    setActiveTeams(teamsData)
 
-                    const tournamentSnapshots = await Promise.all(tournamentPromises)
-                    const tournamentsData = tournamentSnapshots
-                        .filter(doc => doc.exists())
-                        .map(doc => ({
+                    // Fetch tournaments where captain's teams are participating
+                    const tournamentIds = teamsData.map(team => team.tournamentId)
+                    if (tournamentIds.length > 0) {
+                        const tournamentsQuery = query(
+                            collection(db, "tournaments"),
+                            where("id", "in", tournamentIds)
+                        )
+                        const tournamentsSnapshot = await getDocs(tournamentsQuery)
+                        const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
                             id: doc.id,
                             ...doc.data(),
                             startDate: doc.data().startDate ? new Date(doc.data().startDate).toISOString() : null,
                             endDate: doc.data().endDate ? new Date(doc.data().endDate).toISOString() : null,
-                            registrationDeadline: doc.data().registrationDeadline ?
-                                new Date(doc.data().registrationDeadline).toISOString() : null
+                            registrationDeadline: doc.data().registrationDeadline ? new Date(doc.data().registrationDeadline).toISOString() : null
                         })) as Tournament[]
-
-                    setParticipatingTournaments(tournamentsData)
-                } else {
-                    setParticipatingTournaments([])
+                        setParticipatingTournaments(tournamentsData)
+                    }
                 }
             } catch (error) {
                 console.error("Error fetching data:", error)
@@ -78,7 +68,7 @@ export default function CaptainDashboard() {
             }
         }
 
-        if (!loading && user?.role === UserRole.CAPTAIN) {
+        if (!loading) {
             fetchData()
         }
     }, [user, loading, toast])
@@ -87,7 +77,17 @@ export default function CaptainDashboard() {
         return <div>Loading...</div>
     }
 
-    if (!user || user.role !== UserRole.CAPTAIN) {
+    if (!user) {
+        router.push('/login')
+        return null
+    }
+
+    // If user is not a captain, redirect to appropriate dashboard
+    if (user.role === UserRole.ADMIN) {
+        router.push('/admin/dashboard')
+        return null
+    } else if (user.role === UserRole.MANAGEMENT) {
+        router.push('/management/dashboard')
         return null
     }
 
@@ -95,7 +95,7 @@ export default function CaptainDashboard() {
         <div className="container py-10">
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Captain Dashboard</h1>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your teams and tournaments</p>
                 </div>
             </div>
