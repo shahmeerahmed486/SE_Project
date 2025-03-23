@@ -3,28 +3,22 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthStatus } from "@/src/hooks/useAuthStatus"
-import { UserRole } from "@/types"
+import { UserRole, Tournament } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Trophy, Users, Calendar, MapPin, ArrowRight, Activity } from "lucide-react"
 import { format } from "date-fns"
+import { collection, doc, onSnapshot, query, where, getDocs } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { useToast } from "@/components/ui/use-toast"
+import { documentId } from "firebase/firestore"
 
-interface Tournament {
-    id: string
-    name: string
-    description: string
-    startDate: string
-    endDate: string
-    location: string
-    status: string
-    teamCount: number
-    maxTeams: number
-}
 
 export default function ManagementDashboard() {
     const router = useRouter()
     const { user, loading } = useAuthStatus()
+    const { toast } = useToast()
     const [tournaments, setTournaments] = useState<Tournament[]>([])
     const [stats, setStats] = useState({
         totalTeams: 0,
@@ -35,8 +29,66 @@ export default function ManagementDashboard() {
     useEffect(() => {
         if (!loading && (!user || user.role !== UserRole.MANAGEMENT)) {
             router.push('/login')
+            return
         }
-    }, [user, loading, router])
+
+        // Set up real-time listener for the management user's document
+        if (user?.id) {
+            const unsubscribe = onSnapshot(doc(db, "users", user.id), async (doc) => {
+                if (doc.exists()) {
+                    const assignedTournaments = doc.data().assignedTournaments || []
+                    
+                    // Fetch tournament details for assigned tournaments
+                    try {
+                        const tournamentsQuery = query(
+                            collection(db, "tournaments"),
+                            where(documentId(), "in", assignedTournaments)
+                          )
+                        const tournamentsSnapshot = await getDocs(tournamentsQuery)
+                        const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                            startDate: doc.data().startDate ? new Date(doc.data().startDate).toISOString() : null,
+                            endDate: doc.data().endDate ? new Date(doc.data().endDate).toISOString() : null,
+                            registrationDeadline: doc.data().registrationDeadline ? new Date(doc.data().registrationDeadline).toISOString() : null
+                        })) as Tournament[]
+
+                        setTournaments(tournamentsData)
+
+                        // Update stats
+                        const totalTeams = tournamentsData.reduce((acc, tournament) => acc + tournament.teamCount, 0)
+                        const activeTournaments = tournamentsData.filter(t => t.status === "IN_PROGRESS").length
+                        const upcomingMatches = tournamentsData.filter(t => 
+                            new Date(t.startDate) > new Date() && t.status === "REGISTRATION"
+                        ).length
+
+                        setStats({
+                            totalTeams,
+                            activeTournaments,
+                            upcomingMatches
+                        })
+                    } catch (error) {
+                        console.error("Error fetching tournament details:", error)
+                        toast({
+                            title: "Error",
+                            description: "Failed to load tournament details",
+                            variant: "destructive"
+                        })
+                    }
+                }
+            }, (error) => {
+                console.error("Error listening to user document:", error)
+                toast({
+                    title: "Error",
+                    description: "Failed to update tournament assignments",
+                    variant: "destructive"
+                })
+            })
+
+            // Cleanup subscription on unmount
+            return () => unsubscribe()
+        }
+    }, [user, loading, router, toast])
 
     if (loading) {
         return (
@@ -127,9 +179,9 @@ export default function ManagementDashboard() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <CardTitle>{tournament.name}</CardTitle>
-                                            <CardDescription>{tournament.description}</CardDescription>
+                                            <CardDescription>{tournament.rules?.join(', ') || 'No rules specified'}</CardDescription>
                                         </div>
-                                        <Badge variant={tournament.status === 'active' ? 'default' : 'secondary'}>
+                                        <Badge variant={tournament.status === 'IN_PROGRESS' ? 'default' : 'secondary'}>
                                             {tournament.status}
                                         </Badge>
                                     </div>
@@ -139,17 +191,29 @@ export default function ManagementDashboard() {
                                         <div className="flex items-center gap-2">
                                             <Calendar className="h-4 w-4 text-muted-foreground" />
                                             <span className="text-sm">
-                                                {format(new Date(tournament.startDate), 'MMM dd, yyyy')} - {format(new Date(tournament.endDate), 'MMM dd, yyyy')}
+                                                {tournament.startDate && tournament.endDate ? (
+                                                    <>
+                                                        {format(new Date(tournament.startDate), 'MMM dd, yyyy')} - {format(new Date(tournament.endDate), 'MMM dd, yyyy')}
+                                                    </>
+                                                ) : (
+                                                    'Dates not set'
+                                                )}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <MapPin className="h-4 w-4 text-muted-foreground" />
-                                            <span className="text-sm">{tournament.location}</span>
+                                            <span className="text-sm">
+                                                {tournament.registrationDeadline ? (
+                                                    `Registration Deadline: ${format(new Date(tournament.registrationDeadline), 'MMM dd, yyyy')}`
+                                                ) : (
+                                                    'No registration deadline set'
+                                                )}
+                                            </span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <Users className="h-4 w-4 text-muted-foreground" />
                                             <span className="text-sm">
-                                                {tournament.teamCount}/{tournament.maxTeams} teams
+                                                {tournament.teamCount}/{tournament.teamLimit} teams
                                             </span>
                                         </div>
                                     </div>
