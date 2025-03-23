@@ -17,6 +17,7 @@ import { Plus, Users, Trophy, Settings, ArrowRight, Calendar, MapPin, Check, X, 
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 export default function AdminDashboard() {
   const { user, loading } = useAuthStatus()
@@ -47,6 +48,9 @@ export default function AdminDashboard() {
     format: "KNOCKOUT",
     maxTeams: 16
   })
+
+  const [selectedManagementUser, setSelectedManagementUser] = useState<ManagementTeam | null>(null)
+  const [assignableTournaments, setAssignableTournaments] = useState<Tournament[]>([])
 
   // Check authentication and role
   useEffect(() => {
@@ -264,6 +268,91 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleManageAssignments = async (user: ManagementTeam) => {
+    setSelectedManagementUser(user)
+    try {
+      // Fetch tournaments that are in DRAFT or REGISTRATION state
+      const tournamentsSnapshot = await getDocs(collection(db, "tournaments"))
+      const activeTournaments = tournamentsSnapshot.docs
+        .map(doc => {
+          const data = doc.data()
+          return {
+            id: doc.id,
+            name: data.name,
+            format: data.format,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            registrationDeadline: data.registrationDeadline,
+            teamLimit: data.teamLimit,
+            status: data.status,
+            teamCount: data.teamCount,
+            managementTeam: data.managementTeam,
+            createdBy: data.createdBy,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+            rules: data.rules
+          } as Tournament
+        })
+        .filter(tournament => 
+          tournament.status === "DRAFT" || tournament.status === "REGISTRATION"
+        )
+      setAssignableTournaments(activeTournaments)
+    } catch (error) {
+      console.error("Error fetching assignable tournaments:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load assignable tournaments",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleAssignmentChange = async (tournamentId: string, isAssigned: boolean) => {
+    if (!selectedManagementUser) return
+
+    try {
+      const userRef = doc(db, "users", selectedManagementUser.id)
+      const updatedAssignments = isAssigned
+        ? arrayUnion(tournamentId)
+        : arrayRemove(tournamentId)
+
+      await updateDoc(userRef, {
+        assignedTournaments: updatedAssignments
+      })
+
+      // Update local state
+      setManagementUsers(managementUsers.map(user => 
+        user.id === selectedManagementUser.id
+          ? {
+              ...user,
+              assignedTournaments: isAssigned
+                ? [...(user as ManagementTeam).assignedTournaments, tournamentId]
+                : (user as ManagementTeam).assignedTournaments.filter(id => id !== tournamentId)
+            }
+          : user
+      ))
+
+      setSelectedManagementUser(prev => prev ? {
+        ...prev,
+        assignedTournaments: isAssigned
+          ? [...prev.assignedTournaments, tournamentId]
+          : prev.assignedTournaments.filter(id => id !== tournamentId)
+      } : null)
+
+      toast({
+        title: "Success",
+        description: `Tournament ${isAssigned ? 'assigned' : 'unassigned'} successfully`
+      })
+    } catch (error) {
+      console.error("Error updating assignments:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update tournament assignments",
+        variant: "destructive"
+      })
+    }
+  }
+
   if (loading) {
     return <div>Loading...</div>
   }
@@ -454,7 +543,12 @@ export default function AdminDashboard() {
                         {(user as ManagementTeam).assignedTournaments?.length || 0} tournaments
                       </p>
                     </div>
-                    <Button variant="outline">Manage Assignments</Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => handleManageAssignments(user as ManagementTeam)}
+                    >
+                      Manage Assignments
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -462,6 +556,41 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Tournament Assignment Dialog */}
+      <Dialog open={!!selectedManagementUser} onOpenChange={() => setSelectedManagementUser(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Manage Tournament Assignments for {selectedManagementUser?.username}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {assignableTournaments.map((tournament) => (
+                <div key={tournament.id} className="flex items-center space-x-2 p-2 border rounded">
+                  <Checkbox
+                    id={`tournament-${tournament.id}`}
+                    checked={selectedManagementUser?.assignedTournaments.includes(tournament.id)}
+                    onCheckedChange={(checked) => 
+                      handleAssignmentChange(tournament.id, checked as boolean)
+                    }
+                  />
+                  <label
+                    htmlFor={`tournament-${tournament.id}`}
+                    className="flex-1 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {tournament.name}
+                  </label>
+                  <Badge variant={tournament.status === 'IN_PROGRESS' ? 'default' : 'secondary'}>
+                    {tournament.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Rules Dialog */}
       <Dialog open={!!selectedTournament} onOpenChange={() => setSelectedTournament(null)}>
