@@ -1,6 +1,6 @@
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore"
 import { clientDb, adminDb } from "@/lib/firebase"
-import { Tournament, Team, Match, Announcement } from "@/types"
+import { Tournament, Team, Match, Announcement } from "@/src/types"
 
 export class FirebaseService {
     // Tournament operations
