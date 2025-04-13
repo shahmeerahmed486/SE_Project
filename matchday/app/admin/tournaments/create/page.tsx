@@ -1,13 +1,11 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { collection, addDoc, serverTimestamp } from "firebase/firestore"
-import { db, auth } from "@/lib/firebase"
-import { onAuthStateChanged } from "firebase/auth"
+import { db } from "@/src/firebase/config"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Trophy, ArrowLeft } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { useAuthStatus } from "@/src/hooks/useAuthStatus"
+import { UserRole } from "@/src/types"
 
 export default function CreateTournamentPage() {
   const [name, setName] = useState("")
@@ -27,21 +27,15 @@ export default function CreateTournamentPage() {
   const [maxTeams, setMaxTeams] = useState("16")
   const [status, setStatus] = useState("upcoming")
   const [loading, setLoading] = useState(false)
-  const [user, setUser] = useState<any>(null)
   const router = useRouter()
   const { toast } = useToast()
+  const { user, loading: authLoading } = useAuthStatus()
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser)
-      } else {
-        router.push("/login")
-      }
-    })
-
-    return () => unsubscribe()
-  }, [router])
+    if (!authLoading && (!user || user.role !== UserRole.ADMIN)) {
+      router.push("/login")
+    }
+  }, [user, authLoading, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,7 +54,7 @@ export default function CreateTournamentPage() {
         teamCount: 0,
         status,
         createdAt: serverTimestamp(),
-        createdBy: user?.uid,
+        createdBy: user?.id,
       })
 
       toast({
@@ -80,7 +74,15 @@ export default function CreateTournamentPage() {
     }
   }
 
-  if (!user) {
+  if (authLoading) {
+    return (
+      <div className="container flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (!user || user.role !== UserRole.ADMIN) {
     return null
   }
 
@@ -149,11 +151,8 @@ export default function CreateTournamentPage() {
                     <SelectValue placeholder="Select format" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Knockout">Knockout</SelectItem>
-                    <SelectItem value="League">League</SelectItem>
-                    <SelectItem value="Round Robin">Round Robin</SelectItem>
-                    <SelectItem value="League + Knockout">League + Knockout</SelectItem>
-                    <SelectItem value="Group Stage">Group Stage</SelectItem>
+                    <SelectItem value="KNOCKOUT">Knockout</SelectItem>
+                    <SelectItem value="LEAGUE">League</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -179,9 +178,11 @@ export default function CreateTournamentPage() {
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="upcoming">Upcoming</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="DRAFT">Draft</SelectItem>
+                    <SelectItem value="REGISTRATION_OPEN">Registration Open</SelectItem>
+                    <SelectItem value="REGISTRATION_CLOSED">Registration Closed</SelectItem>
+                    <SelectItem value="ONGOING">Ongoing</SelectItem>
+                    <SelectItem value="COMPLETED">Completed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

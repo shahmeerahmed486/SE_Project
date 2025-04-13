@@ -37,13 +37,13 @@ export default function ManagementDashboard() {
             const unsubscribe = onSnapshot(doc(db, "users", user.id), async (doc) => {
                 if (doc.exists()) {
                     const assignedTournaments = doc.data().assignedTournaments || []
-                    
+
                     // Fetch tournament details for assigned tournaments
                     try {
                         const tournamentsQuery = query(
                             collection(db, "tournaments"),
                             where(documentId(), "in", assignedTournaments)
-                          )
+                        )
                         const tournamentsSnapshot = await getDocs(tournamentsQuery)
                         const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
                             id: doc.id,
@@ -58,7 +58,7 @@ export default function ManagementDashboard() {
                         // Update stats
                         const totalTeams = tournamentsData.reduce((acc, tournament) => acc + tournament.teamCount, 0)
                         const activeTournaments = tournamentsData.filter(t => t.status === "IN_PROGRESS").length
-                        const upcomingMatches = tournamentsData.filter(t => 
+                        const upcomingMatches = tournamentsData.filter(t =>
                             new Date(t.startDate) > new Date() && t.status === "REGISTRATION"
                         ).length
 

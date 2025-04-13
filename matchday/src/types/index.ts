@@ -59,6 +59,12 @@ export enum TournamentStatus {
     COMPLETED = 'COMPLETED'
 }
 
+export enum TournamentFormat {
+    LEAGUE = 'LEAGUE',
+    KNOCKOUT = 'KNOCKOUT'
+}
+
+
 export interface Tournament {
     id: string;
     name: string;
@@ -88,4 +94,50 @@ export interface Team {
     }[];
     createdAt: string;
     updatedAt: string;
-} 
+}
+
+export interface Match {
+    id: string;
+    tournamentId: string;
+    homeTeamId: string;
+    awayTeamId: string;
+    homeTeamScore?: number;
+    awayTeamScore?: number;
+    winner?: string;  // team ID of winner
+    status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+    round?: number;   // For knockout tournaments
+    matchDate: string;
+    venue?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface MatchSchedule {
+    id: string;
+    tournamentId: string;
+    format: 'LEAGUE' | 'KNOCKOUT';
+    matches: Match[];
+    currentRound?: number;  // For knockout tournaments
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PointsTableEntry {
+    teamId: string;
+    teamName: string;
+    matchesPlayed: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    goalDifference: number;
+    points: number;
+}
+
+export interface PointsTable {
+    id: string;
+    tournamentId: string;
+    entries: PointsTableEntry[];
+    lastUpdated: string;
+}
