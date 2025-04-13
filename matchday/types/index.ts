@@ -47,7 +47,7 @@ export interface Tournament {
   endDate: string;
   registrationDeadline: string;
   teamLimit: number;
-  status: "DRAFT" | "REGISTRATION" | "IN_PROGRESS" | "COMPLETED";
+  status: "DRAFT" | "REGISTRATION" | "REGISTRATION_CLOSED" | "IN_PROGRESS" | "COMPLETED";
   teamCount: number;
   managementTeam: string[];
   createdBy: string;
@@ -80,13 +80,13 @@ export interface Match {
   tournamentId: string;
   teamA: string;
   teamB: string;
+  scoreA: number | null;
+  scoreB: number | null;
   date: string;
   time: string;
   location: string;
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED';
   round?: string;
-  scoreA: number | null;
-  scoreB: number | null;
-  status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED";
   updatedAt: string;
 }
 
