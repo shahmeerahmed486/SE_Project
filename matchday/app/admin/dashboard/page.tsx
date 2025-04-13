@@ -296,31 +296,7 @@ export default function AdminDashboard() {
   // Management team assignment functions
   const handleManageAssignments = async (user: ManagementUser) => {
     setSelectedManagementUser(user)
-    try {
-      const tournamentsSnapshot = await getDocs(collection(db, "tournaments"))
-      const activeTournaments = tournamentsSnapshot.docs
-        .map(doc => {
-          const data = doc.data()
-          return {
-            id: doc.id,
-            ...data,
-            startDate: data.startDate ? new Date(data.startDate).toISOString() : null,
-            endDate: data.endDate ? new Date(data.endDate).toISOString() : null,
-            registrationDeadline: data.registrationDeadline ? new Date(data.registrationDeadline).toISOString() : null
-          } as Tournament
-        })
-        .filter(tournament =>
-          tournament.status === "DRAFT" || tournament.status === "REGISTRATION_OPEN"
-        )
-      setAssignableTournaments(activeTournaments)
-    } catch (error) {
-      console.error("Error fetching assignable tournaments:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load assignable tournaments",
-        variant: "destructive"
-      })
-    }
+    setAssignableTournaments(tournaments)
   }
 
   const handleAssignmentChange = async (tournamentId: string, isAssigned: boolean) => {
@@ -339,33 +315,26 @@ export default function AdminDashboard() {
       }
 
       // Update local state
-      setManagementUsers(managementUsers.map(user =>
-        user.id === selectedManagementUser.id
+      setManagementUsers(managementUsers.map(u =>
+        u.id === selectedManagementUser.id
           ? {
-            ...user,
+            ...u,
             assignedTournaments: isAssigned
-              ? [...user.assignedTournaments, tournamentId]
-              : user.assignedTournaments.filter(id => id !== tournamentId)
+              ? [...(u.assignedTournaments || []), tournamentId]
+              : (u.assignedTournaments || []).filter(id => id !== tournamentId)
           }
-          : user
+          : u
       ))
-
-      setSelectedManagementUser(prev => prev ? {
-        ...prev,
-        assignedTournaments: isAssigned
-          ? [...prev.assignedTournaments, tournamentId]
-          : prev.assignedTournaments.filter(id => id !== tournamentId)
-      } : null)
 
       toast({
         title: "Success",
-        description: `Tournament ${isAssigned ? 'assigned' : 'unassigned'} successfully`
+        description: "Tournament assignment updated successfully"
       })
     } catch (error) {
-      console.error("Error updating assignments:", error)
+      console.error("Error updating tournament assignment:", error)
       toast({
         title: "Error",
-        description: "Failed to update tournament assignments",
+        description: "Failed to update tournament assignment",
         variant: "destructive"
       })
     }
@@ -597,113 +566,11 @@ export default function AdminDashboard() {
                       <CardDescription>{tournament.rules?.join(', ') || 'No rules specified'}</CardDescription>
                     </div>
                     <div className="flex gap-2">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedTournamentForAnnouncement(tournament)
-                              setShowAnnouncementDialog(true)
-                            }}
-                          >
-                            <Megaphone className="h-4 w-4 mr-2" />
-                            Announce
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Create Announcement for {tournament.name}</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="title">Title</Label>
-                              <Input
-                                id="title"
-                                value={newAnnouncement.title}
-                                onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
-                                placeholder="Enter announcement title"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="description">Description</Label>
-                              <Textarea
-                                id="description"
-                                value={newAnnouncement.description}
-                                onChange={(e) => setNewAnnouncement(prev => ({ ...prev, description: e.target.value }))}
-                                placeholder="Enter announcement description"
-                              />
-                            </div>
-                            <Button onClick={handleCreateAnnouncement} className="w-full">
-                              Create Announcement
-                            </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
                       <Button
                         variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedTournament(tournament)
-                          setShowEditTournamentDialog(true)
-                        }}
+                        onClick={() => router.push(`/admin/tournaments/${tournament.id}`)}
                       >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Edit Details
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <span className={getStatusColor(tournament.status)}>
-                              {tournament.status === TournamentStatus.DRAFT && '📝 Draft'}
-                              {tournament.status === TournamentStatus.REGISTRATION_OPEN && '🏆 Registration Open'}
-                              {tournament.status === TournamentStatus.REGISTRATION_CLOSED && '🚫 Registration Closed'}
-                              {tournament.status === TournamentStatus.ONGOING && '⏳ Ongoing'}
-                              {tournament.status === TournamentStatus.COMPLETED && '✅ Completed'}
-                            </span>
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(tournament.id, TournamentStatus.DRAFT)}
-                            disabled={tournament.status === TournamentStatus.DRAFT}
-                          >
-                            📝 Draft
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(tournament.id, TournamentStatus.REGISTRATION_OPEN)}
-                            disabled={tournament.status === TournamentStatus.REGISTRATION_OPEN}
-                          >
-                            🏆 Registration Open
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(tournament.id, TournamentStatus.REGISTRATION_CLOSED)}
-                            disabled={tournament.status === TournamentStatus.REGISTRATION_CLOSED}
-                          >
-                            🚫 Registration Closed
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(tournament.id, TournamentStatus.ONGOING)}
-                            disabled={tournament.status === TournamentStatus.ONGOING}
-                          >
-                            ⏳ Ongoing
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(tournament.id, TournamentStatus.COMPLETED)}
-                            disabled={tournament.status === TournamentStatus.COMPLETED}
-                          >
-                            ✅ Completed
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteTournament(tournament.id)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
+                        Manage Tournament
                       </Button>
                     </div>
                   </div>
@@ -738,14 +605,6 @@ export default function AdminDashboard() {
                         {tournament.teamCount}/{tournament.maxTeams} teams
                       </span>
                     </div>
-                  </div>
-                  <div className="mt-4 flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setSelectedTournament(tournament)}
-                    >
-                      Manage Rules
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
