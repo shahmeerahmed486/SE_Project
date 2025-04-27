@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Trophy } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { Tournament } from "@/types"
+import { Tournament } from "@/src/types"
 
 export default function TeamRegistrationPage({ params }: { params: { tournamentId: string } }) {
   const [tournament, setTournament] = useState<Tournament | null>(null)
@@ -31,10 +31,10 @@ export default function TeamRegistrationPage({ params }: { params: { tournamentI
         const tournamentDoc = await getDoc(doc(db, "tournaments", params.tournamentId))
         
         if (tournamentDoc.exists()) {
-          const data = tournamentDoc.data() as Tournament
+          const data = tournamentDoc.data() as Omit<Tournament, 'id'> // Exclude id from data type
           setTournament({
-            id: tournamentDoc.id,
-            ...data
+            ...data,
+            id: tournamentDoc.id, // Set id explicitly after spreading data
           })
         } else {
           toast({
@@ -264,4 +264,4 @@ export default function TeamRegistrationPage({ params }: { params: { tournamentI
       </Card>
     </div>
   )
-} 
+}

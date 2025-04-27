@@ -6,9 +6,9 @@ import {
   Box,
   TextField,
   IconButton,
-} from '@mui/material';
+} from '@ui/material';
 import { Edit as EditIcon, Save as SaveIcon } from '@mui/icons-material';
-import { Match } from '../types';
+import { Match } from '../src/types';
 
 interface MatchCardProps {
   match: Match;

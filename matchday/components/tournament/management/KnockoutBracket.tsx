@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from 'react';
-import { Match } from '@/types';
+import { Match } from '@/src/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface KnockoutBracketProps {

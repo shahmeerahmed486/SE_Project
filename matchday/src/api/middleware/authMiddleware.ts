@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateToken } from '../utils/auth';
-import { UserRole } from '../models/User';
+import { UserRole } from '@/src/types';
 
 export async function withAuth(
     handler: Function,

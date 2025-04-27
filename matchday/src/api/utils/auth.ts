@@ -1,4 +1,4 @@
-import { User } from "@/types"
+import { User } from "@/src/types"
 
 export function generateToken(user: User): string {
     // For demo purposes, just create a simple encoded string
@@ -19,4 +19,7 @@ export function verifyToken(token: string): { id: string; role: string } | null 
     } catch {
         return null
     }
-} 
+}
+
+// Alias verifyToken as validateToken
+export const validateToken = verifyToken;

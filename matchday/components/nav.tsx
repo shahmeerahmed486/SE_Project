@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Trophy, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuthStatus } from "@/src/hooks/useAuthStatus"
-import { UserRole } from "@/types"
+import { UserRole } from "@/src/types"
 import {
     Sheet,
     SheetContent,

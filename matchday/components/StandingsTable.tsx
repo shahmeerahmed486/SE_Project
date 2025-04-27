@@ -9,7 +9,7 @@ import {
   Paper,
   Typography
 } from '@mui/material';
-import { Team } from '../types';
+import { Team } from '../src/types';
 
 interface TeamStats extends Team {
   played: number;

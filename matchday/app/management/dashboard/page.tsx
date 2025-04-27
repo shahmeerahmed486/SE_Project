@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthStatus } from "@/src/hooks/useAuthStatus"
-import { UserRole, Tournament } from "@/types"
+import { UserRole, Tournament,TournamentStatus } from "@/src/types"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -57,9 +57,9 @@ export default function ManagementDashboard() {
 
                         // Update stats
                         const totalTeams = tournamentsData.reduce((acc, tournament) => acc + tournament.teamCount, 0)
-                        const activeTournaments = tournamentsData.filter(t => t.status === "IN_PROGRESS").length
+                        const activeTournaments = tournamentsData.filter(t => t.status === TournamentStatus.ONGOING).length
                         const upcomingMatches = tournamentsData.filter(t =>
-                            new Date(t.startDate) > new Date() && t.status === "REGISTRATION"
+                            new Date(t.startDate) > new Date() && t.status === TournamentStatus.REGISTRATION_OPEN
                         ).length
 
                         setStats({
@@ -181,7 +181,7 @@ export default function ManagementDashboard() {
                                             <CardTitle>{tournament.name}</CardTitle>
                                             <CardDescription>{tournament.rules?.join(', ') || 'No rules specified'}</CardDescription>
                                         </div>
-                                        <Badge variant={tournament.status === 'IN_PROGRESS' ? 'default' : 'secondary'}>
+                                        <Badge variant={tournament.status === TournamentStatus.ONGOING ? 'default' : 'secondary'}>
                                             {tournament.status}
                                         </Badge>
                                     </div>
@@ -213,7 +213,7 @@ export default function ManagementDashboard() {
                                         <div className="flex items-center gap-2">
                                             <Users className="h-4 w-4 text-muted-foreground" />
                                             <span className="text-sm">
-                                                {tournament.teamCount}/{tournament.teamLimit} teams
+                                                {tournament.teamCount}/{tournament.maxTeams} teams
                                             </span>
                                         </div>
                                     </div>

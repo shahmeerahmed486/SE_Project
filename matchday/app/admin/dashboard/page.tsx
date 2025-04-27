@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Tournament, User, UserRole, Announcement, TournamentStatus, ManagementUser } from "@/src/types"
+import { Tournament, User, UserRole, Announcement, TournamentStatus, ManagementUser,TournamentFormat } from "@/src/types"
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, arrayRemove, addDoc, deleteDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { AuthService } from "@/src/api/services/AuthService"
@@ -781,6 +781,7 @@ export default function AdminDashboard() {
                 />
               </div>
             </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="format">Tournament Format</Label>
@@ -788,13 +789,13 @@ export default function AdminDashboard() {
                   id="format"
                   className="w-full rounded-md border border-input bg-background px-3 py-2"
                   value={selectedTournament?.format || 'KNOCKOUT'}
-                  onChange={(e) => setSelectedTournament(prev => prev ? { ...prev, format: e.target.value } : null)}
+                  onChange={(e) => setSelectedTournament(prev => prev ? { ...prev, format: e.target.value as TournamentFormat } : null)}
                 >
                   <option value="KNOCKOUT">Knockout</option>
                   <option value="LEAGUE">League</option>
-                  <option value="GROUP_KNOCKOUT">Group + Knockout</option>
                 </select>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="maxTeams">Maximum Teams</Label>
                 <Input

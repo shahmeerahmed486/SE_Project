@@ -9,12 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
-import { Tournament, TournamentStatus } from "@/src/types";
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { Tournament, TournamentFormat, TournamentStatus, Announcement } from "@/src/types";
+import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, getDocs, addDoc, updateDoc as updateDocFirestore, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Plus, Pencil, Trash2, Megaphone, ChevronDown, Check, X, Calendar, MapPin, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Plus, Pencil, Trash2, ChevronDown, Check, X } from "lucide-react";
 import { format } from "date-fns";
+import { use } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,25 +23,25 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { use } from "react";
 
-export default function TournamentManagement({ params }: { params: { id: string } }) {
+export default function TournamentManagement({ params }: { params: Promise<{ id: string }> }) {
     const { user, loading } = useAuthStatus();
     const router = useRouter();
     const { toast } = useToast();
     const [tournament, setTournament] = useState<Tournament | null>(null);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [newRule, setNewRule] = useState("");
     const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
     const [editingRule, setEditingRule] = useState("");
     const [showAnnouncementDialog, setShowAnnouncementDialog] = useState(false);
+    const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
     const [newAnnouncement, setNewAnnouncement] = useState({
         title: "",
-        description: ""
+        message: ""
     });
 
     // Unwrap params using React.use()
-    const unwrappedParams = use(params);
-    const tournamentId = unwrappedParams.id;
+    const { id: tournamentId } = use(params);
 
     useEffect(() => {
         const fetchTournament = async () => {
@@ -74,8 +74,31 @@ export default function TournamentManagement({ params }: { params: { id: string 
             }
         };
 
+        const fetchAnnouncements = async () => {
+            try {
+                const q = query(
+                    collection(db, "announcements"),
+                    where("tournamentId", "==", tournamentId)
+                );
+                const querySnapshot = await getDocs(q);
+                const fetchedAnnouncements: Announcement[] = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                } as Announcement));
+                setAnnouncements(fetchedAnnouncements);
+            } catch (error) {
+                console.error("Error fetching announcements:", error);
+                toast({
+                    title: "Error",
+                    description: "Failed to load announcements",
+                    variant: "destructive"
+                });
+            }
+        };
+
         if (!loading && user?.role === "ADMIN") {
             fetchTournament();
+            fetchAnnouncements();
         }
     }, [tournamentId, user, loading, toast, router]);
 
@@ -201,19 +224,33 @@ export default function TournamentManagement({ params }: { params: { id: string 
     };
 
     const handleCreateAnnouncement = async () => {
-        if (!tournament || !newAnnouncement.title.trim() || !newAnnouncement.description.trim()) return;
+        if (!tournament || !newAnnouncement.title.trim() || !newAnnouncement.message.trim()) return;
 
         try {
-            const tournamentRef = doc(db, "tournaments", tournament.id);
-            await updateDoc(tournamentRef, {
-                announcements: arrayUnion({
-                    title: newAnnouncement.title.trim(),
-                    description: newAnnouncement.description.trim(),
-                    createdAt: new Date().toISOString()
-                })
-            });
+            const now = new Date().toISOString();
+            const announcementData: Omit<Announcement, 'id'> = {
+                title: newAnnouncement.title.trim(),
+                message: newAnnouncement.message.trim(),
+                tournamentId: tournament.id,
+                createdBy: user?.id || 'unknown',
+                createdAt: now,
+                updatedAt: now
+            };
+            await addDoc(collection(db, "announcements"), announcementData);
 
-            setNewAnnouncement({ title: "", description: "" });
+            // Refresh announcements
+            const q = query(
+                collection(db, "announcements"),
+                where("tournamentId", "==", tournament.id)
+            );
+            const querySnapshot = await getDocs(q);
+            const fetchedAnnouncements: Announcement[] = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as Announcement));
+            setAnnouncements(fetchedAnnouncements);
+
+            setNewAnnouncement({ title: "", message: "" });
             setShowAnnouncementDialog(false);
 
             toast({
@@ -225,6 +262,79 @@ export default function TournamentManagement({ params }: { params: { id: string 
             toast({
                 title: "Error",
                 description: "Failed to create announcement",
+                variant: "destructive"
+            });
+        }
+    };
+
+    const handleEditAnnouncement = async (announcement: Announcement) => {
+        if (!tournament || !newAnnouncement.title.trim() || !newAnnouncement.message.trim()) return;
+
+        try {
+            const announcementRef = doc(db, "announcements", announcement.id);
+            const updatedData: Partial<Announcement> = {
+                title: newAnnouncement.title.trim(),
+                message: newAnnouncement.message.trim(),
+                updatedAt: new Date().toISOString()
+            };
+            await updateDocFirestore(announcementRef, updatedData);
+
+            // Refresh announcements
+            const q = query(
+                collection(db, "announcements"),
+                where("tournamentId", "==", tournament.id)
+            );
+            const querySnapshot = await getDocs(q);
+            const fetchedAnnouncements: Announcement[] = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as Announcement));
+            setAnnouncements(fetchedAnnouncements);
+
+            setNewAnnouncement({ title: "", message: "" });
+            setEditingAnnouncement(null);
+            setShowAnnouncementDialog(false);
+
+            toast({
+                title: "Success",
+                description: "Announcement updated successfully"
+            });
+        } catch (error) {
+            console.error("Error updating announcement:", error);
+            toast({
+                title: "Error",
+                description: "Failed to update announcement",
+                variant: "destructive"
+            });
+        }
+    };
+
+    const handleDeleteAnnouncement = async (announcementId: string) => {
+        try {
+            const announcementRef = doc(db, "announcements", announcementId);
+            await deleteDoc(announcementRef);
+
+            // Refresh announcements
+            const q = query(
+                collection(db, "announcements"),
+                where("tournamentId", "==", [tournamentId])
+            );
+            const querySnapshot = await getDocs(q);
+            const fetchedAnnouncements: Announcement[] = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as Announcement));
+            setAnnouncements(fetchedAnnouncements);
+
+            toast({
+                title: "Success",
+                description: "Announcement deleted successfully"
+            });
+        } catch (error) {
+            console.error("Error deleting announcement:", error);
+            toast({
+                title: "Error",
+                description: "Failed to delete announcement",
                 variant: "destructive"
             });
         }
@@ -278,6 +388,19 @@ export default function TournamentManagement({ params }: { params: { id: string 
         }
     };
 
+    // Helper function to safely format a date string (from AnnouncementList fix)
+    const formatDate = (dateString: string | undefined): string => {
+        if (!dateString) return 'Unknown Date';
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) throw new Error('Invalid date');
+            return format(date, 'MMM dd, yyyy');
+        } catch {
+            console.warn(`Invalid date string: ${dateString}`);
+            return 'Invalid Date';
+        }
+    };
+
     if (loading) {
         return <div>Loading...</div>;
     }
@@ -307,8 +430,6 @@ export default function TournamentManagement({ params }: { params: { id: string 
                     <TabsTrigger value="details">Details</TabsTrigger>
                     <TabsTrigger value="rules">Rules</TabsTrigger>
                     <TabsTrigger value="announcements">Announcements</TabsTrigger>
-                    <TabsTrigger value="teams">Teams</TabsTrigger>
-                    <TabsTrigger value="matches">Matches</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="details" className="space-y-6">
@@ -431,11 +552,10 @@ export default function TournamentManagement({ params }: { params: { id: string 
                                             id="format"
                                             className="w-full rounded-md border border-input bg-background px-3 py-2"
                                             value={tournament.format || 'KNOCKOUT'}
-                                            onChange={(e) => setTournament(prev => prev ? { ...prev, format: e.target.value } : null)}
+                                            onChange={(e) => setTournament(prev => prev ? { ...prev, format: e.target.value as TournamentFormat} : null)}
                                         >
                                             <option value="KNOCKOUT">Knockout</option>
                                             <option value="LEAGUE">League</option>
-                                            <option value="GROUP_KNOCKOUT">Group + Knockout</option>
                                         </select>
                                     </div>
                                     <div className="space-y-2">
@@ -546,14 +666,14 @@ export default function TournamentManagement({ params }: { params: { id: string 
                                 </div>
                                 <Dialog open={showAnnouncementDialog} onOpenChange={setShowAnnouncementDialog}>
                                     <DialogTrigger asChild>
-                                        <Button>
+                                        <Button onClick={() => setEditingAnnouncement(null)}>
                                             <Plus className="h-4 w-4 mr-2" />
                                             New Announcement
                                         </Button>
                                     </DialogTrigger>
                                     <DialogContent>
                                         <DialogHeader>
-                                            <DialogTitle>Create Announcement</DialogTitle>
+                                            <DialogTitle>{editingAnnouncement ? "Edit Announcement" : "Create Announcement"}</DialogTitle>
                                         </DialogHeader>
                                         <div className="space-y-4">
                                             <div className="space-y-2">
@@ -566,16 +686,19 @@ export default function TournamentManagement({ params }: { params: { id: string 
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="description">Description</Label>
+                                                <Label htmlFor="message">Message</Label>
                                                 <Textarea
-                                                    id="description"
-                                                    value={newAnnouncement.description}
-                                                    onChange={(e) => setNewAnnouncement(prev => ({ ...prev, description: e.target.value }))}
-                                                    placeholder="Enter announcement description"
+                                                    id="message"
+                                                    value={newAnnouncement.message}
+                                                    onChange={(e) => setNewAnnouncement(prev => ({ ...prev, message: e.target.value }))}
+                                                    placeholder="Enter announcement message"
                                                 />
                                             </div>
-                                            <Button onClick={handleCreateAnnouncement} className="w-full">
-                                                Create Announcement
+                                            <Button
+                                                onClick={editingAnnouncement ? () => handleEditAnnouncement(editingAnnouncement) : handleCreateAnnouncement}
+                                                className="w-full"
+                                            >
+                                                {editingAnnouncement ? "Update Announcement" : "Create Announcement"}
                                             </Button>
                                         </div>
                                     </DialogContent>
@@ -584,59 +707,52 @@ export default function TournamentManagement({ params }: { params: { id: string 
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {tournament.announcements?.map((announcement, index) => (
-                                    <Card key={index}>
-                                        <CardHeader>
-                                            <CardTitle>{announcement.title}</CardTitle>
-                                            <CardDescription>
-                                                {format(new Date(announcement.createdAt), 'MMM dd, yyyy')}
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <p>{announcement.description}</p>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="teams" className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Teams</CardTitle>
-                            <CardDescription>Manage tournament teams</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium">Registered Teams</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {tournament.teamCount || 0} / {tournament.maxTeams} teams
-                                        </p>
+                                {announcements.length === 0 ? (
+                                    <div className="text-center py-4 text-muted-foreground">
+                                        No announcements yet
                                     </div>
-                                    <Button onClick={() => router.push(`/admin/tournaments/${tournament.id}/teams`)}>
-                                        Manage Teams
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="matches" className="space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Matches</CardTitle>
-                            <CardDescription>Manage tournament matches</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                <Button onClick={() => router.push(`/admin/tournaments/${tournament.id}/matches`)}>
-                                    Manage Matches
-                                </Button>
+                                ) : (
+                                    announcements.map((announcement) => (
+                                        <Card key={announcement.id}>
+                                            <CardHeader>
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <CardTitle>{announcement.title}</CardTitle>
+                                                        <CardDescription>
+                                                            {formatDate(announcement.createdAt)}
+                                                        </CardDescription>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            onClick={() => {
+                                                                setEditingAnnouncement(announcement);
+                                                                setNewAnnouncement({
+                                                                    title: announcement.title,
+                                                                    message: announcement.message
+                                                                });
+                                                                setShowAnnouncementDialog(true);
+                                                            }}
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            onClick={() => handleDeleteAnnouncement(announcement.id)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <p>{announcement.message}</p>
+                                            </CardContent>
+                                        </Card>
+                                    ))
+                                )}
                             </div>
                         </CardContent>
                     </Card>

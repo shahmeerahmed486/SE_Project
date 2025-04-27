@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -133,6 +134,19 @@ export function AnnouncementList({ tournamentId, isAdmin, currentUserId }: Annou
         }
     };
 
+    // Helper function to safely format a date string
+    const formatDate = (dateString: string | undefined): string => {
+        if (!dateString) return 'Unknown Date';
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) throw new Error('Invalid date');
+            return format(date, 'MMM dd, yyyy HH:mm');
+        } catch {
+            console.warn(`Invalid date string: ${dateString}`);
+            return 'Invalid Date';
+        }
+    };
+
     if (loading) {
         return <div className="text-center py-4">Loading announcements...</div>;
     }
@@ -176,7 +190,7 @@ export function AnnouncementList({ tournamentId, isAdmin, currentUserId }: Annou
                                             {announcement.content}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
-                                            {format(new Date(announcement.timestamp), 'MMM dd, yyyy HH:mm')}
+                                            {formatDate(announcement.timestamp)}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -234,4 +248,4 @@ export function AnnouncementList({ tournamentId, isAdmin, currentUserId }: Annou
             />
         </div>
     );
-} 
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
-import { Match } from '../types';
+import { Match } from '../src/types';
 import { MatchCard } from './MatchCard';
 
 interface TournamentBracketProps {

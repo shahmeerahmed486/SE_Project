@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, addDoc, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/src/firebase/config';
-import { Match, Tournament, Standings } from '@/types';
+import { Match, Tournament, Standings, TournamentStatus } from '@/src/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -359,9 +359,9 @@ export default function TournamentSchedule({ tournament, updateTournament }: Tou
     return acc;
   }, {} as Record<string, string>);
 
-  const canGenerateSchedule = tournament.status === 'REGISTRATION' || 
-    tournament.status === 'REGISTRATION_CLOSED' || 
-    tournament.status === 'IN_PROGRESS';
+  const canGenerateSchedule = tournament.status === TournamentStatus.REGISTRATION_OPEN || 
+    tournament.status === TournamentStatus.REGISTRATION_CLOSED || 
+    tournament.status === TournamentStatus.ONGOING
 
   const getScheduleView = () => {
     if (loading) {
@@ -466,7 +466,7 @@ export default function TournamentSchedule({ tournament, updateTournament }: Tou
                   match={match}
                   teamNameMap={teamNameMap}
                   onMatchUpdate={handleMatchUpdate}
-                  isManageable={tournament.status === 'IN_PROGRESS'}
+                  isManageable={tournament.status === TournamentStatus.ONGOING}
                 />
               ))}
             </div>
@@ -520,7 +520,6 @@ export default function TournamentSchedule({ tournament, updateTournament }: Tou
               This will create a match schedule based on registered teams.
               {tournament.format === 'LEAGUE' && " Each team will play against all other teams."}
               {tournament.format === 'KNOCKOUT' && " Teams will be randomly seeded in a knockout bracket."}
-              {tournament.format === 'GROUP_KNOCKOUT' && " Teams will be assigned to groups for the group stage."}
             </DialogDescription>
           </DialogHeader>
           

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
-import { Tournament, UserRole, TournamentStatus } from "@/src/types"
+import { Tournament, UserRole, TournamentStatus ,TournamentFormat  } from "@/src/types"
 import { addDoc, collection } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 
@@ -38,7 +38,10 @@ export default function CreateTournament() {
                 status: TournamentStatus.DRAFT,
                 teamCount: 0,
                 createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                format: formData.format as TournamentFormat,
+                rules: formData.rules,
+                registrationDeadline: formData.registrationDeadline,
             }
 
             await addDoc(collection(db, "tournaments"), tournamentData)
@@ -154,20 +157,15 @@ export default function CreateTournament() {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="format">Tournament Format</Label>
-                            <select
-                                id="format"
-                                className="w-full rounded-md border border-input bg-background px-3 py-2"
-                                value={formData.format}
-                                onChange={(e) => setFormData({ ...formData, format: e.target.value })}
-                                required
-                            >
-                                <option value="KNOCKOUT">Knockout</option>
-                                <option value="LEAGUE">League</option>
-                                <option value="GROUP_KNOCKOUT">Group Stage + Knockout</option>
-                            </select>
-                        </div>
+                        <select
+                            id="format"
+                            className="w-full rounded-md border border-input bg-background px-3 py-2"
+                            value={formData.format}
+                            onChange={(e) => setFormData({ ...formData, format: e.target.value as TournamentFormat })}
+                            required>
+                            <option value={TournamentFormat.KNOCKOUT}>Knockout</option>
+                            <option value={TournamentFormat.LEAGUE}>League</option>
+                        </select>
 
                         <div className="flex justify-end gap-4">
                             <Button

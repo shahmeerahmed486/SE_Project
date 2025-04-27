@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/src/firebase/config';
-import { Tournament } from '@/types';
+import { Tournament, TournamentFormat, TournamentStatus } from '@/src/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -126,8 +126,8 @@ export default function TournamentTeams({ tournament, updateTournament }: Tourna
     }
   };
 
-  const isKnockoutFormat = tournament.format === 'KNOCKOUT' || tournament.format === 'GROUP_KNOCKOUT';
-  const isTournamentActive = tournament.status === 'IN_PROGRESS';
+  const isKnockoutFormat = tournament.format === TournamentFormat.KNOCKOUT 
+  const isTournamentActive = tournament.status === TournamentStatus.ONGOING
 
   return (
     <Card>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState } from "react"
@@ -7,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Users, MapPin, ArrowLeft, Trophy, Info, Shield, Award, Clock } from "lucide-react"
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore'
+import { Calendar, Users, MapPin, ArrowLeft, Trophy, Clock } from "lucide-react"
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import TeamRegistrationForm from '@/components/tournament/TeamRegistrationForm'
 import {
@@ -20,61 +21,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { format } from "date-fns"
-import { AnnouncementList } from '@/src/components/announcement/AnnouncementList'
 import { useAuth } from '@/src/hooks/useAuth'
-import { UserRole, TournamentStatus, Team as TeamType } from '@/src/types'
 import { toast } from "@/components/ui/use-toast"
-import { addDoc, collection } from 'firebase/firestore'
 import { TeamService } from '@/src/services/team/TeamService'
 import Cookies from 'js-cookie'
 
-interface Tournament {
-  id: string
-  name: string
-  description: string
-  startDate: string
-  endDate: string
-  location: string
-  format: string
-  status: TournamentStatus
-  teamCount: number
-  maxTeams: number
-  rules: string[]
-  prizes: string[]
-  registrationDeadline?: string
-}
-
-interface Match {
-  id: string
-  teamA: string
-  teamB: string
-  date: string
-  time: string
-  location: string
-  status: string
-  scoreA?: number
-  scoreB?: number
-}
-
-interface FormData {
-  teamName: string;
-  teamLogo: File | null;
-  contactName: string;
-  contactEmail: string;
-  contactPhone: string;
-  players: {
-    name: string;
-    position: string;
-    number: string;
-  }[];
-}
+import { UserRole, TournamentStatus, Tournament, Match, Team, Announcement } from '@/src/types'
 
 export default function TournamentDetailsPage() {
   const params = useParams()
   const tournamentId = params?.id as string
   const [tournament, setTournament] = useState<Tournament | null>(null)
-  const [teams, setTeams] = useState<TeamType[]>([])
+  const [teams, setTeams] = useState<Team[]>([])
   const [matches, setMatches] = useState<Match[]>([])
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [showRegistrationForm, setShowRegistrationForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,6 +64,18 @@ export default function TournamentDetailsPage() {
         // Fetch teams
         const teamsData = await TeamService.getTeamsByTournament(tournamentId)
         setTeams(teamsData)
+
+        // Fetch announcements
+        const q = query(
+          collection(db, "announcements"),
+          where("tournamentId", "==", tournamentId)
+        )
+        const querySnapshot = await getDocs(q)
+        const fetchedAnnouncements: Announcement[] = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Announcement))
+        setAnnouncements(fetchedAnnouncements)
 
         // Check if current user (captain) already has a team
         if (user?.role === "CAPTAIN") {
@@ -146,13 +118,15 @@ export default function TournamentDetailsPage() {
         return
       }
 
-      const teamData: Omit<TeamType, 'id'> = {
+      const teamData: Omit<Team, 'id'> = {
         name: data.teamName,
         tournamentId,
         captainId: user.id,
         players: data.players,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        eliminated: false, // Initialize as not eliminated
+        status: 'pending' // Set initial status for team approval
       }
 
       await TeamService.createTeam(teamData)
@@ -173,6 +147,19 @@ export default function TournamentDetailsPage() {
         description: error.message || "Failed to register team",
         variant: "destructive",
       })
+    }
+  }
+
+  // Helper function to safely format a date string (from TournamentManagement)
+  const formatDate = (dateString: string | undefined): string => {
+    if (!dateString) return 'Unknown Date'
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) throw new Error('Invalid date')
+      return format(date, 'MMM dd, yyyy')
+    } catch {
+      console.warn(`Invalid date string: ${dateString}`)
+      return 'Invalid Date'
     }
   }
 
@@ -282,11 +269,31 @@ export default function TournamentDetailsPage() {
               <CardTitle>Announcements</CardTitle>
             </CardHeader>
             <CardContent>
-              <AnnouncementList
-                tournamentId={tournamentId}
-                isAdmin={user?.role === UserRole.ADMIN}
-                currentUserId={user?.id || ''}
-              />
+              <div className="space-y-4">
+                {announcements.length === 0 ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    No announcements yet
+                  </div>
+                ) : (
+                  announcements.map((announcement) => (
+                    <Card key={announcement.id}>
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <CardTitle>{announcement.title}</CardTitle>
+                            <CardDescription>
+                              {formatDate(announcement.createdAt)}
+                            </CardDescription>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <p>{announcement.message}</p>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -362,7 +369,7 @@ export default function TournamentDetailsPage() {
                 </div>
                 <div className="divide-y">
                   {matches
-                    .filter((match) => match.status === "scheduled")
+                    .filter((match) => match.status === "SCHEDULED")
                     .map((match) => (
                       <div key={match.id} className="grid grid-cols-5 items-center px-4 py-3">
                         <div className="col-span-2 font-medium">
@@ -389,7 +396,7 @@ export default function TournamentDetailsPage() {
                 </div>
                 <div className="divide-y">
                   {matches
-                    .filter((match) => match.status === "completed")
+                    .filter((match) => match.status === "COMPLETED")
                     .map((match) => (
                       <div key={match.id} className="grid grid-cols-5 items-center px-4 py-3">
                         <div className="col-span-2 font-medium">
@@ -428,4 +435,3 @@ export default function TournamentDetailsPage() {
     </div>
   )
 }
-

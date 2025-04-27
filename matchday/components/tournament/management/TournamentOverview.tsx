@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/src/firebase/config';
-import { Tournament } from '@/types';
+import { Tournament, TournamentStatus, TournamentFormat } from '@/src/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { CalendarIcon, Clock } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -28,7 +28,7 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
     startDate: tournament.startDate,
     endDate: tournament.endDate,
     registrationDeadline: tournament.registrationDeadline,
-    teamLimit: tournament.teamLimit,
+    maxTeams: tournament.maxTeams,
     status: tournament.status,
     rules: tournament.rules || [],
   });
@@ -58,11 +58,39 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
     });
   };
 
+  const handleRulesChange = (index: number, value: string) => {
+    const updatedRules = [...(formData.rules || [])];
+    updatedRules[index] = value;
+    setFormData({
+      ...formData,
+      rules: updatedRules,
+    });
+  };
+
+  const addRule = () => {
+    setFormData({
+      ...formData,
+      rules: [...(formData.rules || []), ""],
+    });
+  };
+
+  const removeRule = (index: number) => {
+    const updatedRules = [...(formData.rules || [])];
+    updatedRules.splice(index, 1);
+    setFormData({
+      ...formData,
+      rules: updatedRules,
+    });
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
       const tournamentRef = doc(db, 'tournaments', tournament.id);
-      await updateDoc(tournamentRef, formData);
+      await updateDoc(tournamentRef, {
+        ...formData,
+        updatedAt: new Date().toISOString(), // Update timestamp
+      });
       updateTournament(formData);
       setIsEditing(false);
       toast({
@@ -90,7 +118,7 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
         startDate: tournament.startDate,
         endDate: tournament.endDate,
         registrationDeadline: tournament.registrationDeadline,
-        teamLimit: tournament.teamLimit,
+        maxTeams: tournament.maxTeams,
         status: tournament.status,
         rules: tournament.rules || [],
       });
@@ -123,7 +151,7 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
         <div className="grid gap-6 md:grid-cols-2">
           <div>
             <h3 className="font-medium text-sm text-muted-foreground mb-2">Teams</h3>
-            <p className="text-lg">{tournament.teamCount} / {tournament.teamLimit}</p>
+            <p className="text-lg">{tournament.teamCount} / {tournament.maxTeams}</p>
           </div>
           <div>
             <h3 className="font-medium text-sm text-muted-foreground mb-2">Registration Deadline</h3>
@@ -161,17 +189,6 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
             </ul>
           </div>
         )}
-
-        <div>
-          <h3 className="font-medium text-sm text-muted-foreground mb-2">Tournament Management Team</h3>
-          <div className="flex flex-wrap gap-2 mt-1">
-            {tournament.managementTeam && tournament.managementTeam.map((userId, index) => (
-              <div key={index} className="px-2 py-1 bg-muted rounded-md text-sm">
-                {userId} {/* Ideally would show user name instead of ID */}
-              </div>
-            ))}
-          </div>
-        </div>
       </CardContent>
       <CardFooter>
         <Button onClick={toggleEdit}>Edit Details</Button>
@@ -207,9 +224,8 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
                 <SelectValue placeholder="Select format" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="LEAGUE">League</SelectItem>
-                <SelectItem value="KNOCKOUT">Knockout</SelectItem>
-                <SelectItem value="GROUP_KNOCKOUT">Group & Knockout</SelectItem>
+                <SelectItem value={TournamentFormat.LEAGUE}>League</SelectItem>
+                <SelectItem value={TournamentFormat.KNOCKOUT}>Knockout</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -225,10 +241,11 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="DRAFT">Draft</SelectItem>
-                <SelectItem value="REGISTRATION">Registration</SelectItem>
-                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                <SelectItem value="COMPLETED">Completed</SelectItem>
+                <SelectItem value={TournamentStatus.DRAFT}>Draft</SelectItem>
+                <SelectItem value={TournamentStatus.REGISTRATION_OPEN}>Registration Open</SelectItem>
+                <SelectItem value={TournamentStatus.REGISTRATION_CLOSED}>Registration Closed</SelectItem>
+                <SelectItem value={TournamentStatus.ONGOING}>Ongoing</SelectItem>
+                <SelectItem value={TournamentStatus.COMPLETED}>Completed</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -236,14 +253,14 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
 
         <div className="grid gap-6 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="teamLimit">
+            <label className="text-sm font-medium" htmlFor="maxTeams">
               Team Limit
             </label>
             <Input
-              id="teamLimit"
-              name="teamLimit"
+              id="maxTeams"
+              name="maxTeams"
               type="number"
-              value={formData.teamLimit}
+              value={formData.maxTeams}
               onChange={handleNumberChange}
               min={tournament.teamCount}
             />
@@ -256,7 +273,7 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
               id="registrationDeadline"
               name="registrationDeadline"
               type="date"
-              value={formData.registrationDeadline?.split('T')[0]}
+              value={formatDateForInput(formData.registrationDeadline)}
               onChange={handleChange}
             />
           </div>
@@ -271,7 +288,7 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
               id="startDate"
               name="startDate"
               type="date"
-              value={formData.startDate?.split('T')[0]}
+              value={formatDateForInput(formData.startDate)}
               onChange={handleChange}
             />
           </div>
@@ -283,10 +300,36 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
               id="endDate"
               name="endDate"
               type="date"
-              value={formData.endDate?.split('T')[0]}
+              value={formatDateForInput(formData.endDate)}
               onChange={handleChange}
             />
           </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Tournament Rules</label>
+            <Button type="button" variant="outline" onClick={addRule}>
+              Add Rule
+            </Button>
+          </div>
+          {(formData.rules || []).map((rule, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <Textarea
+                value={rule}
+                onChange={(e) => handleRulesChange(index, e.target.value)}
+                placeholder={`Rule ${index + 1}`}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => removeRule(index)}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
         </div>
       </CardContent>
       <CardFooter className="gap-2">
@@ -304,6 +347,15 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
     </>
   );
 
+  const formatDateForInput = (dateString?: string) => {
+    if (!dateString) return "";
+    try {
+      return format(new Date(dateString), 'yyyy-MM-dd');
+    } catch {
+      return dateString;
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -313,4 +365,4 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
       {isEditing ? renderEditMode() : renderViewMode()}
     </Card>
   );
-} 
+}

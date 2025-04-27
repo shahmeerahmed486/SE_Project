@@ -1,4 +1,4 @@
-import { Tournament, UserRole } from '@/types';
+import { Tournament, TournamentStatus, UserRole } from '@/src/types';
 import { store } from '../store/inMemoryStore';
 import { AuthService } from './AuthService';
 
@@ -20,10 +20,8 @@ export class TournamentService {
         const tournament: Tournament = {
             id: crypto.randomUUID(),
             ...data,
-            status: "DRAFT",
+            status: TournamentStatus.DRAFT,
             teamCount: 0,
-            managementTeam: [],
-            createdBy: userId,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
@@ -46,11 +44,11 @@ export class TournamentService {
     }
 }
 
-const adminUser = {
-    email: "admin@matchday.com",
-    password: "secure_password",
-    role: UserRole.ADMIN,
-    name: "Admin User",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-}
+// const adminUser = {
+//     email: "admin@matchday.com",
+//     password: "secure_password",
+//     role: UserRole.ADMIN,
+//     name: "Admin User",
+//     createdAt: new Date().toISOString(),
+//     updatedAt: new Date().toISOString()
+// }

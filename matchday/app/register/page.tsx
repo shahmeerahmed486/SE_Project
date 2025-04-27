@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { AuthService } from "@/src/api/services/AuthService"
-import { UserRole } from "@/types"
+import { UserRole } from "@/src/types"
 import { Toast } from "@/components/ui/toast"
 import Cookies from 'js-cookie'
 import { dispatchAuthStateChange } from "@/src/hooks/useAuthStatus"
