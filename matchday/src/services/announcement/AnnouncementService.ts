@@ -25,10 +25,7 @@ export class AnnouncementService {
             const announcement: Omit<Announcement, 'id'> = {
                 tournamentId,
                 title: data.title.trim(),
-                description: data.description.trim(),
-                content: data.description.trim(),
-                priority: 'low',
-                timestamp: new Date().toISOString(),
+                message: data.message.trim(),
                 createdBy: data.createdBy,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -62,9 +59,9 @@ export class AnnouncementService {
                     ...doc.data()
                 })) as Announcement[];
 
-            // Sort by timestamp in descending order
+            // Sort by createdAt in descending order
             announcements.sort((a, b) =>
-                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             );
 
             console.log('Mapped announcements:', announcements);

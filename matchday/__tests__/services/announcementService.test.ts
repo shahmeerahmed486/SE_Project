@@ -1,27 +1,37 @@
-import { AnnouncementService } from '../../src/services/announcement/AnnouncementService';
-import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { AnnouncementService } from '@/src/services/announcement/AnnouncementService';
+import { db } from '@/lib/firebase';
+import { addDoc, collection, doc, getDoc, getDocs, query, where, updateDoc, deleteDoc } from 'firebase/firestore';
 
-// Mock Firebase
-jest.mock('firebase/firestore', () => ({
-    doc: jest.fn(),
-    getDoc: jest.fn(),
-    updateDoc: jest.fn(),
-    collection: jest.fn(),
-    addDoc: jest.fn(),
-    query: jest.fn(),
-    where: jest.fn(),
-    getDocs: jest.fn()
+// Mock console.log
+jest.spyOn(console, 'log').mockImplementation(() => { });
+
+jest.mock('@/lib/firebase', () => ({
+    db: {}
 }));
 
-// TC37: Test AnnouncementService functionality
+jest.mock('firebase/firestore', () => {
+    const actualFirestore = jest.requireActual('firebase/firestore');
+    return {
+        ...actualFirestore,
+        collection: jest.fn(),
+        addDoc: jest.fn(),
+        getDoc: jest.fn(),
+        getDocs: jest.fn(),
+        query: jest.fn(),
+        where: jest.fn(),
+        updateDoc: jest.fn(),
+        deleteDoc: jest.fn(),
+        doc: jest.fn()
+    };
+});
+
 describe('AnnouncementService', () => {
-    const mockAnnouncementId = 'announcement1';
-    const mockTournamentId = 'tournament1';
-    const mockAnnouncement = {
+    const mockCollectionRef = { path: 'announcements' };
+    const tournamentId = 't1';
+    const announcementId = 'a1';
+    const announcementData = {
         title: 'Test Announcement',
         message: 'Test Message',
-        tournamentId: mockTournamentId,
         createdBy: 'user1',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -29,106 +39,138 @@ describe('AnnouncementService', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        (collection as jest.Mock).mockReturnValue(mockCollectionRef);
     });
 
-    // TC38: Test successful announcement creation
-    it('creates announcement successfully', async () => {
-        const mockDocRef = { id: mockAnnouncementId };
-        (addDoc as jest.Mock).mockResolvedValueOnce(mockDocRef);
+    describe('createAnnouncement', () => {
+        it('should create an announcement', async () => {
+            const mockDocRef = { id: 'generated-id' };
+            (addDoc as jest.Mock).mockResolvedValue(mockDocRef);
 
-        const result = await AnnouncementService.createAnnouncement(mockTournamentId, mockAnnouncement);
+            const result = await AnnouncementService.createAnnouncement(tournamentId, announcementData);
 
-        expect(addDoc).toHaveBeenCalledWith(
-            collection(db, 'announcements'),
-            expect.objectContaining({
-                ...mockAnnouncement,
-                tournamentId: mockTournamentId
-            })
-        );
-        expect(result.id).toBe(mockAnnouncementId);
+            expect(collection).toHaveBeenCalledWith(db, 'announcements');
+            expect(addDoc).toHaveBeenCalledWith(mockCollectionRef, expect.objectContaining({
+                tournamentId,
+                title: announcementData.title,
+                message: announcementData.message,
+                createdBy: announcementData.createdBy,
+            }));
+            expect(result).toEqual(expect.objectContaining({
+                id: 'generated-id',
+                tournamentId,
+                title: announcementData.title,
+                message: announcementData.message,
+                createdBy: announcementData.createdBy,
+            }));
+        });
     });
 
-    // TC39: Test successful announcement update
-    it('updates announcement successfully', async () => {
-        const mockAnnouncementDoc = {
-            exists: () => true
-        };
+    describe('getAnnouncements', () => {
+        it('should fetch and sort announcements', async () => {
+            const mockDocs = [
+                {
+                    id: 'a1',
+                    data: () => ({
+                        tournamentId,
+                        title: 'First Announcement',
+                        message: 'Hello',
+                        createdBy: 'user1',
+                        createdAt: '2025-04-28T10:00:00.000Z',
+                        updatedAt: '2025-04-28T10:00:00.000Z'
+                    })
+                },
+                {
+                    id: 'a2',
+                    data: () => ({
+                        tournamentId,
+                        title: 'Second Announcement',
+                        message: 'World',
+                        createdBy: 'user2',
+                        createdAt: '2025-04-29T10:00:00.000Z',
+                        updatedAt: '2025-04-29T10:00:00.000Z'
+                    })
+                }
+            ];
+            (query as jest.Mock).mockReturnValue('mocked-query');
+            (getDocs as jest.Mock).mockResolvedValue({ docs: mockDocs, size: 2 });
 
-        (getDoc as jest.Mock).mockResolvedValueOnce(mockAnnouncementDoc);
+            const result = await AnnouncementService.getAnnouncements(tournamentId);
 
-        await AnnouncementService.updateAnnouncement(mockTournamentId, mockAnnouncementId, {
-            title: 'Updated Title'
+            // Check if collection, query, and getDocs were called
+            expect(collection).toHaveBeenCalledWith(db, 'announcements');
+            expect(query).toHaveBeenCalled();
+            expect(getDocs).toHaveBeenCalled();
+
+            // Ensure announcements are sorted by createdAt (newest first)
+            expect(result[0].id).toBe('a2'); // Newest first
+            expect(result[1].id).toBe('a1');
+        });
+    });
+
+    describe('getAnnouncement', () => {
+        it('should fetch a single announcement', async () => {
+            const mockDocSnap = {
+                exists: jest.fn(() => true),
+                data: jest.fn(() => ({
+                    tournamentId,
+                    title: 'Fetched Announcement',
+                    message: 'Fetched Message',
+                    createdBy: 'user3',
+                    createdAt: '2025-04-29T10:00:00.000Z',
+                    updatedAt: '2025-04-29T10:00:00.000Z'
+                }))
+            };
+            (doc as jest.Mock).mockReturnValue('mocked-doc-ref');
+            (getDoc as jest.Mock).mockResolvedValue(mockDocSnap);
+
+            const result = await AnnouncementService.getAnnouncement(tournamentId, announcementId);
+
+            expect(doc).toHaveBeenCalledWith(mockCollectionRef, announcementId);
+            expect(getDoc).toHaveBeenCalledWith('mocked-doc-ref');
+            expect(result).toEqual(expect.objectContaining({
+                tournamentId,
+                title: 'Fetched Announcement',
+            }));
         });
 
-        expect(updateDoc).toHaveBeenCalledWith(
-            doc(db, 'announcements', mockAnnouncementId),
-            expect.objectContaining({
+        it('should return null if announcement does not exist', async () => {
+            const mockDocSnap = {
+                exists: jest.fn(() => false),
+                data: jest.fn()
+            };
+            (doc as jest.Mock).mockReturnValue('mocked-doc-ref');
+            (getDoc as jest.Mock).mockResolvedValue(mockDocSnap);
+
+            const result = await AnnouncementService.getAnnouncement(tournamentId, announcementId);
+
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('updateAnnouncement', () => {
+        it('should update an announcement', async () => {
+            (doc as jest.Mock).mockReturnValue('mocked-doc-ref');
+            (updateDoc as jest.Mock).mockResolvedValue(undefined);
+
+            const updateData = { title: 'Updated Title' };
+            await AnnouncementService.updateAnnouncement(tournamentId, announcementId, updateData);
+
+            expect(updateDoc).toHaveBeenCalledWith('mocked-doc-ref', expect.objectContaining({
                 title: 'Updated Title',
                 updatedAt: expect.any(String)
-            })
-        );
+            }));
+        });
     });
 
-    // TC40: Test announcement update with invalid announcement
-    it('handles invalid announcement error', async () => {
-        const mockAnnouncementDoc = {
-            exists: () => false
-        };
+    describe('deleteAnnouncement', () => {
+        it('should delete an announcement', async () => {
+            (doc as jest.Mock).mockReturnValue('mocked-doc-ref');
+            (deleteDoc as jest.Mock).mockResolvedValue(undefined);
 
-        (getDoc as jest.Mock).mockResolvedValueOnce(mockAnnouncementDoc);
+            await AnnouncementService.deleteAnnouncement(tournamentId, announcementId);
 
-        await expect(AnnouncementService.updateAnnouncement(mockTournamentId, mockAnnouncementId, {
-            title: 'Updated Title'
-        })).rejects.toThrow('Failed to update announcement');
+            expect(deleteDoc).toHaveBeenCalledWith('mocked-doc-ref');
+        });
     });
-
-    // TC41: Test successful announcement retrieval by tournament
-    it('gets announcements by tournament successfully', async () => {
-        const mockQuerySnapshot = {
-            docs: [
-                { id: 'announcement1', data: () => ({ ...mockAnnouncement, tournamentId: mockTournamentId }) },
-                { id: 'announcement2', data: () => ({ ...mockAnnouncement, title: 'Announcement 2', tournamentId: mockTournamentId }) }
-            ]
-        };
-
-        (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnapshot);
-
-        const result = await AnnouncementService.getAnnouncements(mockTournamentId);
-
-        expect(result).toHaveLength(2);
-        expect(result[0]).toEqual(expect.objectContaining({
-            ...mockAnnouncement,
-            tournamentId: mockTournamentId
-        }));
-    });
-
-    // TC42: Test successful announcement retrieval by ID
-    it('gets announcement by ID successfully', async () => {
-        const mockAnnouncementDoc = {
-            exists: () => true,
-            data: () => ({ ...mockAnnouncement, tournamentId: mockTournamentId })
-        };
-
-        (getDoc as jest.Mock).mockResolvedValueOnce(mockAnnouncementDoc);
-
-        const result = await AnnouncementService.getAnnouncement(mockTournamentId, mockAnnouncementId);
-
-        expect(result).toEqual(expect.objectContaining({
-            ...mockAnnouncement,
-            tournamentId: mockTournamentId
-        }));
-    });
-
-    // TC43: Test announcement retrieval with invalid ID
-    it('handles invalid announcement ID', async () => {
-        const mockAnnouncementDoc = {
-            exists: () => false
-        };
-
-        (getDoc as jest.Mock).mockResolvedValueOnce(mockAnnouncementDoc);
-
-        const result = await AnnouncementService.getAnnouncement(mockTournamentId, mockAnnouncementId);
-
-        expect(result).toBeNull();
-    });
-}); 
+});

@@ -1,4 +1,4 @@
-import { User, UserRole } from '@/types'
+import { User, UserRole } from '@/src/types'
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import Cookies from 'js-cookie'
@@ -33,8 +33,9 @@ export class AuthService {
                 email: DEFAULT_ADMIN.email,
                 username: DEFAULT_ADMIN.username,
                 role: UserRole.ADMIN,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                password: DEFAULT_ADMIN.password,
+                createdAt: new Date(),
+                updatedAt: new Date()
             }
 
             // Store admin in Firestore with plain password
@@ -66,8 +67,9 @@ export class AuthService {
                 username: userData.username,
                 role: userData.role || UserRole.CAPTAIN,
                 phone: userData.phone || '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                password: userData.password,
+                createdAt: new Date(),
+                updatedAt: new Date()
             }
 
             const user: User = baseUser.role === UserRole.CAPTAIN

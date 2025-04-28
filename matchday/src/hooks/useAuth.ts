@@ -41,25 +41,24 @@ export function useAuth() {
     useEffect(() => {
         const initializeAuth = async () => {
             try {
-                const token = Cookies.get('token')
+                const token = Cookies.get('token');
                 if (!token) {
-                    setUser(null)
-                    setLoading(false)
-                    return
+                    setUser(null);
+                } else {
+                    const user = await AuthService.validateToken(token);
+                    setUser(user);
                 }
-
-                const user = await AuthService.validateToken(token)
-                setUser(user)
             } catch (error) {
-                console.error('Auth initialization failed:', error)
-                setUser(null)
+                console.error('Auth initialization failed:', error);
+                setUser(null);
             } finally {
-                setLoading(false)
+                setLoading(false);  // Ensure this is always called to stop loading
             }
-        }
+        };
 
-        initializeAuth()
-    }, [])
+        initializeAuth();
+    }, []);
+
 
     const signUp = async (email: string, password: string, name: string, role: UserRole = UserRole.CAPTAIN, phone?: string) => {
         if (role === UserRole.CAPTAIN && !phone) {

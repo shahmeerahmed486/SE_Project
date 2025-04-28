@@ -1,4 +1,4 @@
-import { Team, Player, UserRole } from '@/types'
+import { Team, Player, UserRole } from '@/src/types'
 import { store } from '../store/inMemoryStore'
 import { AuthService } from './AuthService'
 import { doc, setDoc } from 'firebase/firestore'

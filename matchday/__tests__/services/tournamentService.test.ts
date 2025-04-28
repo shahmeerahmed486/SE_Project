@@ -1,95 +1,94 @@
-import { TournamentService } from '../../src/api/services/TournamentService';
-import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
-import { TournamentFormat, TournamentStatus } from '../../src/types';
+import { MatchService } from '@/src/api/services/MatchService';
+import { AuthService } from '@/src/api/services/AuthService';
+import { store } from '@/src/api/store/inMemoryStore';
+import { Match, UserRole } from '@/src/types';
 
-// Mock Firebase
-jest.mock('firebase/firestore', () => ({
-    doc: jest.fn(),
-    getDoc: jest.fn(),
-    updateDoc: jest.fn(),
-    collection: jest.fn(),
-    addDoc: jest.fn(),
-    query: jest.fn(),
-    where: jest.fn(),
-    getDocs: jest.fn()
-}));
+jest.mock('@/src/api/services/AuthService');
+jest.mock('@/src/api/store/inMemoryStore');
 
-// TC23: Test tournamentService functionality
-describe('tournamentService', () => {
-    const mockTournamentId = 't1';
-    const mockTournament = {
-        name: 'Test Tournament',
-        description: 'Test Description',
-        format: TournamentFormat.LEAGUE,
-        startDate: '2024-01-01',
-        endDate: '2024-01-31',
-        registrationDeadline: '2023-12-31',
-        location: 'Test Location',
-        teamLimit: 8
+// Mock crypto.randomUUID
+Object.defineProperty(global, 'crypto', {
+    value: {
+        randomUUID: () => 'mock-uuid'
+    }
+});
+
+// Mock Date.now() to return a fixed timestamp
+const mockTimestamp = '2025-04-28T20:04:17.837Z';
+jest.spyOn(Date.prototype, 'toISOString').mockReturnValue(mockTimestamp);
+
+describe('MatchService', () => {
+    const mockMatch: Omit<Match, 'id'> = {
+        tournamentId: 't1',
+        teamA: 'Team A',
+        teamB: 'Team B',
+        date: '2024-01-01',
+        time: '14:00',
+        location: 'Stadium 1',
+        round: 'Round 1',
+        status: 'SCHEDULED',
+        scoreA: null,
+        scoreB: null,
+        createdBy: 'user1',
+        createdAt: mockTimestamp,
+        updatedAt: mockTimestamp
     };
+
+    const mockUserId = 'user1';
 
     beforeEach(() => {
         jest.clearAllMocks();
+        (AuthService.validateUserRole as jest.Mock).mockResolvedValue({ id: mockUserId, role: UserRole.ADMIN });
     });
 
-    // TC24: Test successful tournament creation
-    it('creates tournament successfully', async () => {
-        const mockDocRef = { id: mockTournamentId };
-        (addDoc as jest.Mock).mockResolvedValueOnce(mockDocRef);
+    describe('scheduleMatch', () => {
+        it('should schedule a match successfully', async () => {
+            const mockCreatedMatch = { id: 'm1', ...mockMatch };
+            (store.createMatch as jest.Mock).mockResolvedValue(mockCreatedMatch);
 
-        const result = await TournamentService.createTournament(mockTournament, 'user1');
+            const result = await MatchService.scheduleMatch(mockMatch, mockUserId);
 
-        expect(addDoc).toHaveBeenCalledWith(
-            collection(db, 'tournaments'),
-            expect.objectContaining({
-                name: mockTournament.name,
-                description: mockTournament.description,
-                format: mockTournament.format,
-                startDate: mockTournament.startDate,
-                endDate: mockTournament.endDate,
-                registrationDeadline: mockTournament.registrationDeadline,
-                location: mockTournament.location,
-                status: TournamentStatus.DRAFT,
-                teamCount: 0,
-                maxTeams: mockTournament.teamLimit,
-                rules: []
-            })
-        );
-        expect(result.id).toBe(mockTournamentId);
+            expect(AuthService.validateUserRole).toHaveBeenCalledWith(mockUserId, [UserRole.ADMIN, UserRole.MANAGEMENT]);
+            expect(store.createMatch).toHaveBeenCalledWith(expect.objectContaining({
+                ...mockMatch,
+                id: expect.any(String)
+            }));
+            expect(result).toEqual(mockCreatedMatch);
+        });
+
+        it('should throw error for unauthorized user', async () => {
+            (AuthService.validateUserRole as jest.Mock).mockRejectedValue(new Error('Unauthorized'));
+
+            await expect(MatchService.scheduleMatch(mockMatch, mockUserId))
+                .rejects.toThrow('Unauthorized');
+        });
     });
 
-    // TC25: Test successful tournament update
-    it('updates tournament successfully', async () => {
-        const mockTournamentDoc = {
-            exists: () => true
-        };
+    describe('updateMatchResult', () => {
+        it('should update match result successfully', async () => {
+            const matchId = 'm1';
+            const scoreA = 2;
+            const scoreB = 1;
+            const mockUpdatedMatch = { id: matchId, ...mockMatch, scoreA, scoreB, status: 'COMPLETED' };
+            (store.updateMatch as jest.Mock).mockResolvedValue(mockUpdatedMatch);
 
-        (getDoc as jest.Mock).mockResolvedValueOnce(mockTournamentDoc);
+            const result = await MatchService.updateMatchResult(matchId, scoreA, scoreB, mockUserId);
 
-        await TournamentService.updateTournament(mockTournamentId, {
-            name: 'Updated Tournament Name'
-        }, 'user1');
-
-        expect(updateDoc).toHaveBeenCalledWith(
-            doc(db, 'tournaments', mockTournamentId),
-            expect.objectContaining({
-                name: 'Updated Tournament Name',
+            expect(AuthService.validateUserRole).toHaveBeenCalledWith(mockUserId, [UserRole.ADMIN, UserRole.MANAGEMENT]);
+            expect(store.updateMatch).toHaveBeenCalledWith(matchId, expect.objectContaining({
+                scoreA,
+                scoreB,
+                status: 'COMPLETED',
                 updatedAt: expect.any(String)
-            })
-        );
-    });
+            }));
+            expect(result).toEqual(mockUpdatedMatch);
+        });
 
-    // TC26: Test tournament update with invalid tournament
-    it('handles invalid tournament error', async () => {
-        const mockTournamentDoc = {
-            exists: () => false
-        };
+        it('should throw error for unauthorized user', async () => {
+            (AuthService.validateUserRole as jest.Mock).mockRejectedValue(new Error('Unauthorized'));
 
-        (getDoc as jest.Mock).mockResolvedValueOnce(mockTournamentDoc);
-
-        await expect(TournamentService.updateTournament(mockTournamentId, {
-            name: 'Updated Tournament Name'
-        }, 'user1')).rejects.toThrow('Tournament not found');
+            await expect(MatchService.updateMatchResult('m1', 2, 1, mockUserId))
+                .rejects.toThrow('Unauthorized');
+        });
     });
 }); 

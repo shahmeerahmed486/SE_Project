@@ -1,75 +1,111 @@
-import { renderHook, act } from '@testing-library/react';
-import { useAuth } from '../../src/hooks/useAuth';
-import { UserRole } from '../../src/types';
+import { renderHook, act } from '@testing-library/react'
+import { useAuth } from '@/src/hooks/useAuth'
+import { AuthService } from '@/src/api/services/AuthService'
+import Cookies from 'js-cookie'
 
-// Mock dependencies
+jest.mock('@/src/api/services/AuthService', () => ({
+    AuthService: {
+        validateToken: jest.fn(),
+        signup: jest.fn(),
+        login: jest.fn(),
+        logout: jest.fn(),
+        createManagementUser: jest.fn()
+    }
+}))
+
 jest.mock('js-cookie', () => ({
     get: jest.fn(),
     set: jest.fn(),
-}));
-jest.mock('../src/api/services/AuthService', () => ({
-    AuthService: {
-        validateToken: jest.fn(),
-        login: jest.fn(),
-        signup: jest.fn(),
-        logout: jest.fn(),
-        createManagementUser: jest.fn(),
-    },
-}));
+    remove: jest.fn()
+}))
 
-const mockUser = {
-    id: 'u1',
-    email: 'test@example.com',
-    username: 'testuser',
-    name: 'Test User',
-    role: UserRole.ADMIN,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-};
+jest.mock('next/navigation', () => ({
+    useRouter: () => ({
+        push: jest.fn()
+    })
+}))
 
 describe('useAuth', () => {
+    const mockUser = {
+        id: '1',
+        username: 'testuser',
+        email: 'test@example.com',
+        role: 'ADMIN',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    // 🛡️ Mock and store the original console.error
+    const originalConsoleError = console.error;
+    beforeAll(() => {
+        console.error = jest.fn();
+    });
+
+    afterAll(() => {
+        console.error = originalConsoleError; // Restore after all tests
+    });
+
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
-    it('returns initial state correctly when no token', async () => {
-        const Cookies = require('js-cookie');
-        Cookies.get.mockReturnValue(undefined);
+    it('initializes with no user when no token exists', async () => {
+        (Cookies.get as jest.Mock).mockReturnValue(undefined);
 
-        const { result, waitForNextUpdate } = renderHook(() => useAuth());
-
-        await waitForNextUpdate();
+        let result: any;
+        await act(async () => {
+            result = renderHook(() => useAuth()).result;
+        });
 
         expect(result.current.user).toBeNull();
         expect(result.current.loading).toBe(false);
     });
 
-    it('returns authenticated state correctly when token is present', async () => {
-        const Cookies = require('js-cookie');
-        const { AuthService } = require('../src/api/services/AuthService');
-        Cookies.get.mockReturnValue('mock-token');
-        AuthService.validateToken.mockResolvedValue(mockUser);
+    it('initializes with user when valid token exists', async () => {
+        (Cookies.get as jest.Mock).mockReturnValue('valid-token');
+        (AuthService.validateToken as jest.Mock).mockResolvedValue(mockUser);
 
-        const { result, waitForNextUpdate } = renderHook(() => useAuth());
+        let result: any;
+        await act(async () => {
+            result = renderHook(() => useAuth()).result;
+        });
 
-        await waitForNextUpdate();
-
+        expect(AuthService.validateToken).toHaveBeenCalledWith('valid-token');
         expect(result.current.user).toEqual(mockUser);
         expect(result.current.loading).toBe(false);
     });
 
-    it('handles role-based access correctly', async () => {
-        const Cookies = require('js-cookie');
-        const { AuthService } = require('../src/api/services/AuthService');
-        Cookies.get.mockReturnValue('mock-token');
-        AuthService.validateToken.mockResolvedValue(mockUser);
+    it('handles token validation failure', async () => {
+        (Cookies.get as jest.Mock).mockReturnValue('invalid-token');
+        (AuthService.validateToken as jest.Mock).mockRejectedValue(new Error('Invalid token'));
 
-        const { result, waitForNextUpdate } = renderHook(() => useAuth());
+        let result: any;
+        await act(async () => {
+            result = renderHook(() => useAuth()).result;
+            await Promise.resolve();
+        });
 
-        await waitForNextUpdate();
+        expect(result.current.user).toBeNull();
+        expect(result.current.loading).toBe(false);
+    });
 
-        expect(result.current.isAdmin()).toBe(true);
-        expect(result.current.isManagement()).toBe(false);
-        expect(result.current.isCaptain()).toBe(false);
+    it('logs out correctly', async () => {
+        (Cookies.get as jest.Mock).mockReturnValue('valid-token');
+        (AuthService.validateToken as jest.Mock).mockResolvedValue(mockUser);
+
+        let result: any;
+        await act(async () => {
+            result = renderHook(() => useAuth()).result;
+            await Promise.resolve();
+        });
+
+        expect(result.current.user).toEqual(mockUser);
+
+        act(() => {
+            result.current.logout();
+        });
+
+        expect(AuthService.logout).toHaveBeenCalled();
+        expect(result.current.user).toBeNull();
     });
 });

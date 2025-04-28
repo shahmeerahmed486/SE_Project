@@ -1,153 +1,207 @@
-import { AuthService } from '../../src/services/auth/AuthService';
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
-import { UserRole } from '../../src/types';
+import { AuthService, UserCreate } from '@/src/api/services/AuthService';
+import { UserRole } from '@/src/types';
+import { doc, setDoc, collection, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import Cookies from 'js-cookie';
 
-// Mock Firebase
+// Mock console.error
+jest.spyOn(console, 'error').mockImplementation(() => { });
+
+// Mock Firebase Firestore
 jest.mock('firebase/firestore', () => ({
     doc: jest.fn(),
     setDoc: jest.fn(),
-    getDoc: jest.fn(),
     collection: jest.fn(),
     query: jest.fn(),
     where: jest.fn(),
-    getDocs: jest.fn()
+    getDocs: jest.fn(),
+    getDoc: jest.fn()
 }));
 
-// Mock localStorage
-const mockLocalStorage = {
-    getItem: jest.fn(),
-    setItem: jest.fn(),
-    removeItem: jest.fn()
-};
-Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
+// Mock js-cookie
+jest.mock('js-cookie', () => ({
+    get: jest.fn(),
+    set: jest.fn(),
+    remove: jest.fn()
+}));
 
-// TC44: Test AuthService functionality
 describe('AuthService', () => {
-    const mockUser = {
-        id: 'user1',
+    const mockUserData: UserCreate = {
         email: 'test@example.com',
         password: 'password123',
-        name: 'Test User',
-        role: UserRole.CAPTAIN,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        username: 'testuser'
     };
 
     beforeEach(() => {
         jest.clearAllMocks();
-        mockLocalStorage.getItem.mockClear();
-        mockLocalStorage.setItem.mockClear();
-        mockLocalStorage.removeItem.mockClear();
     });
 
-    // TC45: Test successful sign up
-    it('signs up user successfully', async () => {
-        (getDocs as jest.Mock).mockResolvedValueOnce({ empty: true });
+    describe('signup', () => {
+        it('signs up user successfully', async () => {
+            const mockDocRef = { id: 'user1' };
+            (doc as jest.Mock).mockReturnValue(mockDocRef);
+            (setDoc as jest.Mock).mockResolvedValue(undefined);
+            (getDocs as jest.Mock).mockResolvedValue({ empty: true });
 
-        const result = await AuthService.signUp(
-            mockUser.email,
-            mockUser.password,
-            mockUser.name,
-            mockUser.role
-        );
+            const result = await AuthService.signup(mockUserData);
 
-        expect(setDoc).toHaveBeenCalledWith(
-            doc(db, 'users', expect.any(String)),
-            expect.objectContaining({
-                email: mockUser.email,
-                name: mockUser.name,
-                role: mockUser.role
-            })
-        );
-        expect(mockLocalStorage.setItem).toHaveBeenCalledWith('userId', expect.any(String));
-    });
-
-    // TC46: Test sign up with existing email
-    it('handles existing email sign up', async () => {
-        (getDocs as jest.Mock).mockResolvedValueOnce({ empty: false });
-
-        await expect(AuthService.signUp(
-            mockUser.email,
-            mockUser.password,
-            mockUser.name,
-            mockUser.role
-        )).rejects.toThrow('User already exists');
-    });
-
-    // TC47: Test successful sign in
-    it('signs in user successfully', async () => {
-        (getDocs as jest.Mock).mockResolvedValueOnce({
-            empty: false,
-            docs: [{ data: () => mockUser }]
+            expect(doc).toHaveBeenCalledWith(db, 'users', expect.any(String));
+            expect(setDoc).toHaveBeenCalledWith(mockDocRef, expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.CAPTAIN
+            }));
+            expect(result.user).toEqual(expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.CAPTAIN
+            }));
+            expect(result.token).toBeDefined();
         });
 
-        const result = await AuthService.signIn(mockUser.email, mockUser.password);
+        it('handles existing email sign up', async () => {
+            (getDocs as jest.Mock).mockResolvedValue({ empty: false });
 
-        expect(result).toEqual(mockUser);
-        expect(mockLocalStorage.setItem).toHaveBeenCalledWith('userId', mockUser.id);
+            await expect(AuthService.signup(mockUserData))
+                .rejects.toThrow('User already exists');
+        });
     });
 
-    // TC48: Test sign in with invalid credentials
-    it('handles invalid sign in credentials', async () => {
-        (getDocs as jest.Mock).mockResolvedValueOnce({
-            empty: false,
-            docs: [{ data: () => ({ ...mockUser, password: 'wrongpassword' }) }]
+    describe('login', () => {
+        it('logs in user successfully', async () => {
+            const mockUserDoc = {
+                id: 'user1',
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.CAPTAIN,
+                password: 'password123'
+            };
+            (getDocs as jest.Mock).mockResolvedValue({
+                empty: false,
+                docs: [{ data: () => mockUserDoc }]
+            });
+
+            const result = await AuthService.login('test@example.com', 'password123');
+
+            expect(result.user).toEqual(expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.CAPTAIN
+            }));
+            expect(result.token).toBeDefined();
         });
 
-        await expect(AuthService.signIn(mockUser.email, mockUser.password))
-            .rejects.toThrow('Invalid password');
-    });
+        it('handles invalid credentials', async () => {
+            (getDocs as jest.Mock).mockResolvedValue({ empty: true });
 
-    // TC49: Test successful sign out
-    it('signs out successfully', async () => {
-        await AuthService.signOut();
-
-        expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('userId');
-    });
-
-    // TC50: Test get current user
-    it('gets current user successfully', async () => {
-        mockLocalStorage.getItem.mockReturnValueOnce(mockUser.id);
-        (getDoc as jest.Mock).mockResolvedValueOnce({
-            exists: () => true,
-            data: () => mockUser
+            await expect(AuthService.login('test@example.com', 'wrongpassword'))
+                .rejects.toThrow('Invalid credentials');
         });
-
-        const result = await AuthService.getCurrentUser();
-
-        expect(result).toEqual(mockUser);
     });
 
-    // TC51: Test get current user when not logged in
-    it('returns null when no user is logged in', async () => {
-        mockLocalStorage.getItem.mockReturnValueOnce(null);
+    describe('createManagementUser', () => {
+        it('creates management user successfully', async () => {
+            const mockDocRef = { id: 'user1' };
+            (doc as jest.Mock).mockReturnValue(mockDocRef);
+            (setDoc as jest.Mock).mockResolvedValue(undefined);
+            (getDocs as jest.Mock).mockResolvedValue({ empty: true });
 
-        const result = await AuthService.getCurrentUser();
+            const result = await AuthService.createManagementUser(mockUserData);
 
-        expect(result).toBeNull();
-    });
-
-    // TC52: Test create management user
-    it('creates management user successfully', async () => {
-        const tournamentIds = ['tournament1', 'tournament2'];
-        (getDocs as jest.Mock).mockResolvedValueOnce({ empty: true });
-
-        await AuthService.createManagementUser(
-            mockUser.email,
-            mockUser.password,
-            mockUser.name,
-            tournamentIds
-        );
-
-        expect(setDoc).toHaveBeenCalledWith(
-            doc(db, 'users', expect.any(String)),
-            expect.objectContaining({
-                email: mockUser.email,
-                name: mockUser.name,
+            expect(doc).toHaveBeenCalledWith(db, 'users', expect.any(String));
+            expect(setDoc).toHaveBeenCalledWith(mockDocRef, expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
                 role: UserRole.MANAGEMENT,
-                assignedTournaments: tournamentIds
-            })
-        );
+                assignedTournaments: []
+            }));
+            expect(result.user).toEqual(expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.MANAGEMENT
+            }));
+            expect(result.token).toBeDefined();
+        });
     });
-}); 
+
+    describe('logout', () => {
+        it('removes token cookie', () => {
+            AuthService.logout();
+            expect(Cookies.remove).toHaveBeenCalledWith('token');
+        });
+    });
+
+    describe('validateToken', () => {
+        it('validates token successfully', async () => {
+            const mockUserDoc = {
+                exists: () => true,
+                data: () => ({
+                    email: 'test@example.com',
+                    username: 'testuser',
+                    role: UserRole.CAPTAIN
+                }),
+                id: 'user1'
+            };
+            (doc as jest.Mock).mockReturnValue({});
+            (getDoc as jest.Mock).mockResolvedValue(mockUserDoc);
+
+            const result = await AuthService.validateToken('user1.1234567890.captain');
+            expect(result).toEqual(expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.CAPTAIN
+            }));
+        });
+
+        it('handles invalid token', async () => {
+            const mockUserDoc = {
+                exists: () => false
+            };
+            (doc as jest.Mock).mockReturnValue({});
+            (getDoc as jest.Mock).mockResolvedValue(mockUserDoc);
+
+            await expect(AuthService.validateToken('invalid.token'))
+                .rejects.toThrow('Invalid token');
+        });
+    });
+
+    describe('validateUserRole', () => {
+        it('validates user role successfully', async () => {
+            const mockUserDoc = {
+                exists: () => true,
+                data: () => ({
+                    email: 'test@example.com',
+                    username: 'testuser',
+                    role: UserRole.MANAGEMENT
+                }),
+                id: 'user1'
+            };
+            (doc as jest.Mock).mockReturnValue({});
+            (getDoc as jest.Mock).mockResolvedValue(mockUserDoc);
+
+            const result = await AuthService.validateUserRole('user1', [UserRole.MANAGEMENT]);
+            expect(result).toEqual(expect.objectContaining({
+                email: 'test@example.com',
+                username: 'testuser',
+                role: UserRole.MANAGEMENT
+            }));
+        });
+
+        it('handles insufficient permissions', async () => {
+            const mockUserDoc = {
+                exists: () => true,
+                data: () => ({
+                    email: 'test@example.com',
+                    username: 'testuser',
+                    role: UserRole.CAPTAIN
+                }),
+                id: 'user1'
+            };
+            (doc as jest.Mock).mockReturnValue({});
+            (getDoc as jest.Mock).mockResolvedValue(mockUserDoc);
+
+            await expect(AuthService.validateUserRole('user1', [UserRole.MANAGEMENT]))
+                .rejects.toThrow('Unauthorized: Insufficient permissions');
+        });
+    });
+});

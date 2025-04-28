@@ -6,11 +6,11 @@ const createJestConfig = nextJest({
 
 /** @type {import('jest').Config} */
 const customJestConfig = {
-    setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'], // Ensures jest.setup.ts runs before tests
     moduleNameMapper: {
-        '^@/(.*)$': '<rootDir>/$1', // if you use @/lib, @/components shortcuts
+        '^@/(.*)$': '<rootDir>/$1', // If you use @/lib, @/components shortcuts
     },
-    testEnvironment: 'jsdom',
+    testEnvironment: 'jsdom', // Using jsdom for testing environment
 };
 
 export default createJestConfig(customJestConfig);

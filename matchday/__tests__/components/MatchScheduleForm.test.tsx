@@ -1,18 +1,23 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MatchScheduleForm } from '@/src/components/MatchScheduleForm';
 import { Tournament, TournamentFormat, TournamentStatus } from '@/src/types';
+import { createMatchSchedule } from '@/src/services/matchService';
 
-// TC01: Test MatchScheduleForm rendering and basic functionality
+jest.mock('@/src/services/matchService');
+
+// Mock console.error
+jest.spyOn(console, 'error').mockImplementation(() => { });
+
 describe('MatchScheduleForm', () => {
     const mockTournament: Tournament = {
         id: 't1',
         name: 'Test Tournament',
         description: 'Test Description',
         startDate: '2024-01-01',
-        endDate: '2024-01-10',
+        endDate: '2024-01-31',
         location: 'Test Location',
         format: TournamentFormat.LEAGUE,
-        status: TournamentStatus.DRAFT,
+        status: TournamentStatus.REGISTRATION_CLOSED,
         teamCount: 0,
         maxTeams: 8,
         rules: [],
@@ -21,39 +26,57 @@ describe('MatchScheduleForm', () => {
         updatedAt: new Date().toISOString()
     };
 
-    // TC02: Test form renders with correct initial values
+    const mockOnScheduleCreated = jest.fn();
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
     it('renders form with correct initial values', () => {
-        const mockOnScheduleCreated = jest.fn();
-        render(<MatchScheduleForm tournament={mockTournament} onScheduleCreated={mockOnScheduleCreated} />);
+        render(
+            <MatchScheduleForm
+                tournament={mockTournament}
+                onScheduleCreated={mockOnScheduleCreated}
+            />
+        );
 
         expect(screen.getByText(/create match schedule/i)).toBeInTheDocument();
         expect(screen.getByText(/generate a league format match schedule/i)).toBeInTheDocument();
     });
 
-    // TC03: Test form validation
     it('validates tournament status for schedule creation', async () => {
-        const mockOnScheduleCreated = jest.fn();
-        render(<MatchScheduleForm tournament={mockTournament} onScheduleCreated={mockOnScheduleCreated} />);
+        const tournamentWithInvalidStatus = {
+            ...mockTournament,
+            status: TournamentStatus.DRAFT
+        };
+
+        render(
+            <MatchScheduleForm
+                tournament={tournamentWithInvalidStatus}
+                onScheduleCreated={mockOnScheduleCreated}
+            />
+        );
 
         const createButton = screen.getByRole('button', { name: /create schedule/i });
         expect(createButton).toBeDisabled();
         expect(screen.getByText(/match schedule can only be created when tournament registration is closed/i)).toBeInTheDocument();
     });
 
-    // TC04: Test successful schedule creation
     it('handles successful schedule creation', async () => {
-        const mockOnScheduleCreated = jest.fn();
-        const tournamentWithValidStatus = {
-            ...mockTournament,
-            status: TournamentStatus.REGISTRATION_CLOSED
-        };
+        (createMatchSchedule as jest.Mock).mockResolvedValue(undefined);
 
-        render(<MatchScheduleForm tournament={tournamentWithValidStatus} onScheduleCreated={mockOnScheduleCreated} />);
+        render(
+            <MatchScheduleForm
+                tournament={mockTournament}
+                onScheduleCreated={mockOnScheduleCreated}
+            />
+        );
 
         const createButton = screen.getByRole('button', { name: /create schedule/i });
         fireEvent.click(createButton);
 
         await waitFor(() => {
+            expect(createMatchSchedule).toHaveBeenCalledWith(mockTournament.id);
             expect(mockOnScheduleCreated).toHaveBeenCalled();
         });
     });
