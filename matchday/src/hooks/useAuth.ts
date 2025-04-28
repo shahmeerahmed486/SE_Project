@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { User, UserRole, Admin, ManagementTeam as ManagementUser, Captain } from "@/types"
+import { User, UserRole, Admin, ManagementUser as ManagementUser, Captain } from "@/src/types"
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/src/api/services/AuthService'
 import Cookies from 'js-cookie'

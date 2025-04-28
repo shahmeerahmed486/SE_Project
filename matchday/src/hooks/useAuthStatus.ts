@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AuthService } from '@/src/api/services/AuthService'
 import Cookies from 'js-cookie'
-import { User } from '@/types'
+import { User } from '@/src/types'
 
 // Create a custom event for auth state changes
 const AUTH_STATE_CHANGE = 'authStateChange'

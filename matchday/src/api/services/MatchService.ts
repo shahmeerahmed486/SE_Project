@@ -1,4 +1,4 @@
-import { Match, UserRole } from '@/types'
+import { Match, UserRole } from '@/src/types'
 import { store } from '../store/inMemoryStore'
 import { AuthService } from './AuthService'
 
@@ -22,7 +22,9 @@ export class MatchService {
             scoreA: null,
             scoreB: null,
             status: "SCHEDULED",
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            createdBy: userId,
+            createdAt: new Date().toISOString()
         }
 
         return store.createMatch(match)

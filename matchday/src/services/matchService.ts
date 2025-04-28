@@ -16,19 +16,25 @@ const generateRoundRobinSchedule = (teams: Team[]): Match[] => {
 
     for (let round = 0; round < numRounds; round++) {
         for (let i = 0; i < halfSize; i++) {
-            const homeTeamId = teamIds[i];
-            const awayTeamId = teamIds[teamIds.length - 1 - i];
+            const teamA = teamIds[i];
+            const teamB = teamIds[teamIds.length - 1 - i];
 
             // Skip matches involving the dummy team
-            if (homeTeamId && awayTeamId) {
+            if (teamA && teamB) {
                 matches.push({
-                    id: `${round}-${homeTeamId}-${awayTeamId}`,
+                    id: `${round}-${teamA}-${teamB}`,
                     tournamentId: teams[0].tournamentId,
-                    homeTeamId,
-                    awayTeamId,
+                    teamA,
+                    teamB,
+                    scoreA: null,
+                    scoreB: null,
+                    date: '',
+                    time: '',
+                    location: '',
                     status: 'SCHEDULED',
-                    matchDate: '', // To be set later
-                    createdAt: new Date().toISOString(),
+                    round: round.toString(),
+                    createdBy: 'system',
+                    createdAt: new Date(),
                     updatedAt: new Date().toISOString()
                 });
             }
@@ -50,12 +56,17 @@ const generateKnockoutSchedule = (teams: Team[]): Match[] => {
         matches.push({
             id: `round1-${shuffledTeams[i].id}-${shuffledTeams[i + 1].id}`,
             tournamentId: teams[0].tournamentId,
-            homeTeamId: shuffledTeams[i].id,
-            awayTeamId: shuffledTeams[i + 1].id,
+            teamA: shuffledTeams[i].id,
+            teamB: shuffledTeams[i + 1].id,
+            scoreA: null,
+            scoreB: null,
+            date: '',
+            time: '',
+            location: '',
             status: 'SCHEDULED',
-            round: 1,
-            matchDate: '', // To be set later
-            createdAt: new Date().toISOString(),
+            round: '1',
+            createdBy: 'system',
+            createdAt: new Date(),
             updatedAt: new Date().toISOString()
         });
     }
@@ -128,15 +139,18 @@ export const createMatchSchedule = async (tournamentId: string): Promise<void> =
         const schedule: MatchSchedule = {
             id: `schedule-${tournamentId}`,
             tournamentId,
-            format: tournament.format as TournamentFormat,
-            matches,
-            currentRound: tournament.format === TournamentFormat.KNOCKOUT ? 1 : undefined,
+            matches: matches.map(match => match.id),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
 
         // Save schedule to Firebase
         await setDoc(doc(db, 'matchSchedules', schedule.id), schedule);
+
+        // Save matches to Firebase
+        for (const match of matches) {
+            await setDoc(doc(db, 'matches', match.id), match);
+        }
 
         // If league format, initialize points table
         if (tournament.format === TournamentFormat.LEAGUE) {
@@ -159,77 +173,79 @@ export const createMatchSchedule = async (tournamentId: string): Promise<void> =
 export const updateMatchResult = async (
     matchId: string,
     scheduleId: string,
-    homeTeamScore: number,
-    awayTeamScore: number
+    scoreA: number,
+    scoreB: number
 ): Promise<void> => {
     if (!matchId || !scheduleId) {
         throw new Error('Match ID and Schedule ID are required');
     }
 
     try {
-        // Get the schedule
+        // Get the match
+        const matchDoc = await getDoc(doc(db, 'matches', matchId));
+        if (!matchDoc.exists()) {
+            throw new Error('Match not found');
+        }
+
+        const match = matchDoc.data() as Match;
+
+        // Update match
+        await updateDoc(doc(db, 'matches', matchId), {
+            scoreA,
+            scoreB,
+            status: 'COMPLETED',
+            updatedAt: new Date().toISOString()
+        });
+
+        // If league format, update points table
         const scheduleDoc = await getDoc(doc(db, 'matchSchedules', scheduleId));
         if (!scheduleDoc.exists()) {
             throw new Error('Schedule not found');
         }
 
         const schedule = scheduleDoc.data() as MatchSchedule;
-        const matchIndex = schedule.matches.findIndex(m => m.id === matchId);
-        if (matchIndex === -1) {
-            throw new Error('Match not found');
+        const tournamentDoc = await getDoc(doc(db, 'tournaments', schedule.tournamentId));
+        if (!tournamentDoc.exists()) {
+            throw new Error('Tournament not found');
         }
 
-        // Update match
-        const match = schedule.matches[matchIndex];
-        match.homeTeamScore = homeTeamScore;
-        match.awayTeamScore = awayTeamScore;
-        match.status = 'COMPLETED';
-        match.winner = homeTeamScore > awayTeamScore ? match.homeTeamId
-            : awayTeamScore > homeTeamScore ? match.awayTeamId
-                : undefined;
-        match.updatedAt = new Date().toISOString();
-
-        // Update schedule
-        schedule.matches[matchIndex] = match;
-        await updateDoc(doc(db, 'matchSchedules', scheduleId), { matches: schedule.matches });
-
-        // If league format, update points table
-        if (schedule.format === 'LEAGUE') {
+        const tournament = tournamentDoc.data() as Tournament;
+        if (tournament.format === TournamentFormat.LEAGUE) {
             const pointsTableDoc = await getDoc(doc(db, 'pointsTables', `points-${schedule.tournamentId}`));
             if (!pointsTableDoc.exists()) {
                 throw new Error('Points table not found');
             }
 
             const pointsTable = pointsTableDoc.data() as PointsTable;
-            const homeTeamEntry = pointsTable.entries.find(e => e.teamId === match.homeTeamId);
-            const awayTeamEntry = pointsTable.entries.find(e => e.teamId === match.awayTeamId);
+            const teamAEntry = pointsTable.entries.find(e => e.teamId === match.teamA);
+            const teamBEntry = pointsTable.entries.find(e => e.teamId === match.teamB);
 
-            if (homeTeamEntry && awayTeamEntry) {
+            if (teamAEntry && teamBEntry) {
                 // Update stats
-                homeTeamEntry.matchesPlayed++;
-                awayTeamEntry.matchesPlayed++;
-                homeTeamEntry.goalsFor += homeTeamScore;
-                homeTeamEntry.goalsAgainst += awayTeamScore;
-                awayTeamEntry.goalsFor += awayTeamScore;
-                awayTeamEntry.goalsAgainst += homeTeamScore;
+                teamAEntry.matchesPlayed++;
+                teamBEntry.matchesPlayed++;
+                teamAEntry.goalsFor += scoreA;
+                teamAEntry.goalsAgainst += scoreB;
+                teamBEntry.goalsFor += scoreB;
+                teamBEntry.goalsAgainst += scoreA;
 
-                if (homeTeamScore > awayTeamScore) {
-                    homeTeamEntry.wins++;
-                    homeTeamEntry.points += 3;
-                    awayTeamEntry.losses++;
-                } else if (awayTeamScore > homeTeamScore) {
-                    awayTeamEntry.wins++;
-                    awayTeamEntry.points += 3;
-                    homeTeamEntry.losses++;
+                if (scoreA > scoreB) {
+                    teamAEntry.wins++;
+                    teamAEntry.points += 3;
+                    teamBEntry.losses++;
+                } else if (scoreB > scoreA) {
+                    teamBEntry.wins++;
+                    teamBEntry.points += 3;
+                    teamAEntry.losses++;
                 } else {
-                    homeTeamEntry.draws++;
-                    awayTeamEntry.draws++;
-                    homeTeamEntry.points++;
-                    awayTeamEntry.points++;
+                    teamAEntry.draws++;
+                    teamBEntry.draws++;
+                    teamAEntry.points++;
+                    teamBEntry.points++;
                 }
 
-                homeTeamEntry.goalDifference = homeTeamEntry.goalsFor - homeTeamEntry.goalsAgainst;
-                awayTeamEntry.goalDifference = awayTeamEntry.goalsFor - awayTeamEntry.goalsAgainst;
+                teamAEntry.goalDifference = teamAEntry.goalsFor - teamAEntry.goalsAgainst;
+                teamBEntry.goalDifference = teamBEntry.goalsFor - teamBEntry.goalsAgainst;
             }
 
             await updateDoc(doc(db, 'pointsTables', pointsTable.id), {

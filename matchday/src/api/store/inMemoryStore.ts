@@ -1,4 +1,4 @@
-import { Tournament, User, Match, Team, UserRole, Admin, ManagementTeam, Captain } from '@/types'
+import { Tournament, User, Match, Team, UserRole, Admin, ManagementUser, Captain } from '@/src/types'
 
 class InMemoryStore {
     private tournaments: Map<string, Tournament> = new Map()
@@ -46,7 +46,7 @@ class InMemoryStore {
                 updatedUser = { ...user, ...data } as Admin
                 break
             case UserRole.MANAGEMENT:
-                updatedUser = { ...user, ...data } as ManagementTeam
+                updatedUser = { ...user, ...data } as ManagementUser
                 break
             case UserRole.CAPTAIN:
                 updatedUser = { ...user, ...data } as Captain
@@ -110,7 +110,7 @@ class InMemoryStore {
 
     async getTeamsByTournament(tournamentId: string): Promise<Team[]> {
         return Array.from(this.teams.values())
-            .filter(team => team.tournamentIds.includes(tournamentId))
+            .filter(team => team.tournamentId === tournamentId)
     }
 
     async getTeamByCaptain(captainId: string): Promise<Team | null> {

@@ -1,13 +1,18 @@
 import { store } from '../src/api/store/inMemoryStore';
-import { Tournament, User, UserRole } from '../src/types';
+import { Tournament, User, UserRole, TournamentFormat, TournamentStatus } from '../src/types';
 
 describe('InMemoryStore', () => {
     it('should create and retrieve a user', async () => {
         const user: User = {
             id: 'u1',
             email: 'user@example.com',
+            username: 'testuser',
             name: 'Test User',
-            role: UserRole.ADMIN,
+            role: UserRole.CAPTAIN,
+            password: 'password123',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            phone: '1234567890'
         };
         await store.createUser(user);
         const fetched = await store.getUserById('u1');
@@ -18,15 +23,16 @@ describe('InMemoryStore', () => {
         const tournament: Tournament = {
             id: 't1',
             name: 'Test Tournament',
-            format: 'LEAGUE',
+            description: 'Test tournament description',
+            location: 'Test Location',
+            format: TournamentFormat.LEAGUE,
             startDate: '2024-01-01',
             endDate: '2024-01-10',
             registrationDeadline: '2023-12-31',
             maxTeams: 8,
-            status: 'DRAFT',
+            teamCount: 0,
+            status: TournamentStatus.DRAFT,
             rules: [],
-            teams: [],
-            createdBy: 'u1',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
