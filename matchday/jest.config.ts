@@ -6,11 +6,14 @@ const createJestConfig = nextJest({
 
 /** @type {import('jest').Config} */
 const customJestConfig = {
-    setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'], // Ensures jest.setup.ts runs before tests
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
     moduleNameMapper: {
-        '^@/(.*)$': '<rootDir>/$1', // If you use @/lib, @/components shortcuts
+        '^@/(.*)$': '<rootDir>/$1',
     },
-    testEnvironment: 'jsdom', // Using jsdom for testing environment
+    testEnvironment: 'jsdom',
+    collectCoverage: true, // Enable code coverage
+    coverageDirectory: './coverage', // Set directory for coverage reports
+    coverageReporters: ['text', 'lcov', 'html'], // Report formats
+    coveragePathIgnorePatterns: ['/node_modules/'], // Ignore node_modules
 };
-
 export default createJestConfig(customJestConfig);

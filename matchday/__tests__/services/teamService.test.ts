@@ -33,8 +33,15 @@ describe('TeamService', () => {
         updatedAt: new Date().toISOString()
     };
 
+    let originalConsoleError: typeof console.error;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        originalConsoleError = console.error;
+    });
+
+    afterEach(() => {
+        console.error = originalConsoleError;
     });
 
     // TC31: Test successful team creation
@@ -63,6 +70,7 @@ describe('TeamService', () => {
 
     // TC32: Test team creation with full tournament
     it('handles full tournament error', async () => {
+        console.error = jest.fn(); // Mock console.error
         const mockTournamentDoc = {
             exists: () => true,
             data: () => ({
@@ -78,6 +86,7 @@ describe('TeamService', () => {
 
     // TC33: Test team creation with existing team
     it('handles existing team error', async () => {
+        console.error = jest.fn(); // Mock console.error
         const mockTournamentDoc = {
             exists: () => true,
             data: () => ({
