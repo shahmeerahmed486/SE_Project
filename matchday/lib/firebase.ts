@@ -13,7 +13,22 @@ const clientConfig = {
 };
 
 // Initialize Firebase only if it's not already initialized
-const app = getApps().length === 0 ? initializeApp(clientConfig) : getApp(); 
+const app = getApps().length === 0 ? initializeApp(clientConfig) : getApp();
 
-export const db = process.env.NODE_ENV === 'test' ? {} : getFirestore(app);
+// Create a mock Firestore instance for testing
+const mockDb = {
+  type: 'firestore',
+  app: {},
+  toJSON: () => ({}),
+  collection: () => ({
+    type: 'collection',
+    id: '',
+    path: '',
+    parent: null,
+    withConverter: () => ({}),
+    doc: () => ({})
+  })
+} as any;
+
+export const db = process.env.NODE_ENV === 'test' ? mockDb : getFirestore(app);
 export const storage = process.env.NODE_ENV === 'test' ? {} : getStorage(app);

@@ -1,16 +1,26 @@
 import { Team, Player, UserRole } from '@/src/types'
 import { store } from '../store/inMemoryStore'
 import { AuthService } from './AuthService'
-import { doc, setDoc } from 'firebase/firestore'
+import { doc, setDoc, Firestore } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export interface TeamCreate {
     name: string;
-    players: Omit<Player, 'id' | 'teamId' | 'createdAt' | 'updatedAt'>[];
-    tournamentIds: string[];
+    players: Array<{
+        name: string;
+        position: string;
+        number: string;
+    }>;
+    tournamentId: string;
 }
 
 export class TeamService {
+    private static db: Firestore
+
+    static initialize(dbInstance: Firestore) {
+        this.db = dbInstance
+    }
+
     static async createTeam(data: TeamCreate, captainId: string): Promise<Team> {
         const user = await AuthService.validateUserRole(captainId, [UserRole.CAPTAIN])
 
@@ -27,12 +37,15 @@ export class TeamService {
             captainId,
             players: data.players.map(player => ({
                 id: crypto.randomUUID(),
-                ...player,
+                name: player.name,
+                position: player.position,
+                number: player.number,
                 teamId: '', // Will be set after team creation
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             })),
-            tournamentIds: data.tournamentIds,
+            tournamentId: data.tournamentId,
+            status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         }
@@ -43,7 +56,7 @@ export class TeamService {
             teamId: team.id
         }))
 
-        await setDoc(doc(db, 'teams', team.id), team)
+        await setDoc(doc(this.db, 'teams', team.id), team)
         await store.createTeam(team)
 
         // Update captain's teamId
@@ -67,13 +80,13 @@ export class TeamService {
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'teams', id), { ...team, ...updateData }, { merge: true })
+        await setDoc(doc(this.db, 'teams', id), { ...team, ...updateData }, { merge: true })
         return store.updateTeam(id, updateData)
     }
 
     static async addPlayerToTeam(
         teamId: string,
-        playerData: Omit<Player, 'id' | 'teamId' | 'createdAt' | 'updatedAt'>,
+        playerData: { name: string; position: string; number: string },
         userId: string
     ): Promise<Team> {
         const team = await store.getTeamByCaptain(userId)
@@ -83,7 +96,9 @@ export class TeamService {
 
         const newPlayer: Player = {
             id: crypto.randomUUID(),
-            ...playerData,
+            name: playerData.name,
+            position: playerData.position,
+            number: playerData.number,
             teamId,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -95,7 +110,7 @@ export class TeamService {
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'teams', teamId), updatedTeam)
+        await setDoc(doc(this.db, 'teams', teamId), updatedTeam)
         return store.updateTeam(teamId, updatedTeam)
     }
 
@@ -115,7 +130,7 @@ export class TeamService {
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'teams', teamId), updatedTeam)
+        await setDoc(doc(this.db, 'teams', teamId), updatedTeam)
         return store.updateTeam(teamId, updatedTeam)
     }
 } 

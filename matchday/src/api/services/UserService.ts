@@ -1,8 +1,7 @@
-import { User, UserRole, Admin, ManagementTeam, Captain } from '@/types'
+import { User, UserRole, Admin, ManagementUser, Captain } from '@/src/types'
 import { store } from '../store/inMemoryStore'
-import { auth, db } from '@/lib/firebase'
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore'
 import { AuthService } from './AuthService'
 
 export interface UserCreate {
@@ -12,68 +11,71 @@ export interface UserCreate {
 }
 
 export class UserService {
+    private static db: Firestore
+
+    static initialize(dbInstance: Firestore) {
+        this.db = dbInstance
+    }
+
     static async createAdmin(userData: UserCreate): Promise<Admin> {
         const existingAdmin = await this.getAdminUser()
         if (existingAdmin) {
             throw new Error('Admin user already exists')
         }
 
-        const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
-
         const admin: Admin = {
-            id: userCredential.user.uid,
+            id: crypto.randomUUID(),
             username: userData.username,
             email: userData.email,
             role: UserRole.ADMIN,
+            password: userData.password,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'users', admin.id), admin)
+        await setDoc(doc(this.db, 'users', admin.id), admin)
         await store.createUser(admin)
         return admin
     }
 
-    static async createManagementUser(userData: UserCreate, adminId: string): Promise<ManagementTeam> {
+    static async createManagementUser(userData: UserCreate, adminId: string): Promise<ManagementUser> {
         await this.validateUserRole(adminId, [UserRole.ADMIN])
 
-        const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
-
-        const managementUser: ManagementTeam = {
-            id: userCredential.user.uid,
+        const managementUser: ManagementUser = {
+            id: crypto.randomUUID(),
             username: userData.username,
             email: userData.email,
             role: UserRole.MANAGEMENT,
+            password: userData.password,
             assignedTournaments: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'users', managementUser.id), managementUser)
+        await setDoc(doc(this.db, 'users', managementUser.id), managementUser)
         await store.createUser(managementUser)
         return managementUser
     }
 
     static async registerCaptain(userData: UserCreate): Promise<Captain> {
-        const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
-
         const captain: Captain = {
-            id: userCredential.user.uid,
+            id: crypto.randomUUID(),
             username: userData.username,
             email: userData.email,
             role: UserRole.CAPTAIN,
+            password: userData.password,
+            phone: '',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'users', captain.id), captain)
+        await setDoc(doc(this.db, 'users', captain.id), captain)
         await store.createUser(captain)
         return captain
     }
 
     static async login(email: string, password: string): Promise<User> {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password)
-        const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid))
+        const userDoc = await getDoc(doc(this.db, 'users', email))
 
         if (!userDoc.exists()) {
             throw new Error('User not found')
@@ -83,11 +85,11 @@ export class UserService {
     }
 
     static async logout(): Promise<void> {
-        await signOut(auth)
+        // Implementation depends on your authentication method
     }
 
     static async validateUserRole(userId: string, allowedRoles: UserRole[]): Promise<User> {
-        const userDoc = await getDoc(doc(db, 'users', userId))
+        const userDoc = await getDoc(doc(this.db, 'users', userId))
         if (!userDoc.exists()) {
             throw new Error('User not found')
         }
@@ -109,21 +111,21 @@ export class UserService {
         managementId: string,
         tournamentId: string,
         adminId: string
-    ): Promise<ManagementTeam> {
+    ): Promise<ManagementUser> {
         await this.validateUserRole(adminId, [UserRole.ADMIN])
-        const user = await this.validateUserRole(managementId, [UserRole.MANAGEMENT]) as ManagementTeam
+        const user = await this.validateUserRole(managementId, [UserRole.MANAGEMENT]) as ManagementUser
 
         if (user.assignedTournaments.includes(tournamentId)) {
             throw new Error('Tournament already assigned to this management user')
         }
 
-        const updatedUser: ManagementTeam = {
+        const updatedUser: ManagementUser = {
             ...user,
             assignedTournaments: [...user.assignedTournaments, tournamentId],
             updatedAt: new Date().toISOString()
         }
 
-        await setDoc(doc(db, 'users', updatedUser.id), updatedUser)
+        await setDoc(doc(this.db, 'users', updatedUser.id), updatedUser)
         await store.updateUser(updatedUser.id, updatedUser)
         return updatedUser
     }

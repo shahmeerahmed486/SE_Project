@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState } from "react"
@@ -10,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Users, MapPin, ArrowLeft, Trophy, Clock } from "lucide-react"
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { db } from '@/src/firebase/config'
 import TeamRegistrationForm from '@/components/tournament/TeamRegistrationForm'
 import {
   Dialog,
@@ -25,6 +24,7 @@ import { useAuth } from '@/src/hooks/useAuth'
 import { toast } from "@/components/ui/use-toast"
 import { TeamService } from '@/src/services/team/TeamService'
 import Cookies from 'js-cookie'
+import { getMatchesByTournament } from '@/src/services/matchService'
 
 import { UserRole, TournamentStatus, Tournament, Match, Team, Announcement } from '@/src/types'
 
@@ -64,6 +64,10 @@ export default function TournamentDetailsPage() {
         // Fetch teams
         const teamsData = await TeamService.getTeamsByTournament(tournamentId)
         setTeams(teamsData)
+
+        // Fetch matches
+        const matchesData = await getMatchesByTournament(tournamentId)
+        setMatches(matchesData)
 
         // Fetch announcements
         const q = query(
@@ -122,7 +126,15 @@ export default function TournamentDetailsPage() {
         name: data.teamName,
         tournamentId,
         captainId: user.id,
-        players: data.players,
+        players: data.players.map(player => ({
+          id: crypto.randomUUID(),
+          name: player.name,
+          position: player.position,
+          number: player.number,
+          teamId: '', // Will be set after team creation
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         eliminated: false, // Initialize as not eliminated
@@ -294,6 +306,61 @@ export default function TournamentDetailsPage() {
                   ))
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Match Schedule</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {matches.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  No matches scheduled yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {matches.map((match) => (
+                    <Card key={match.id}>
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <CardTitle>
+                              {teams.find(t => t.id === match.teamA)?.name || 'Team A'} vs {teams.find(t => t.id === match.teamB)?.name || 'Team B'}
+                            </CardTitle>
+                            <CardDescription>
+                              {format(new Date(match.date), 'MMM dd, yyyy')} at {match.time}
+                            </CardDescription>
+                          </div>
+                          <Badge variant={
+                            match.status === 'COMPLETED' ? 'default' :
+                              match.status === 'IN_PROGRESS' ? 'secondary' :
+                                'outline'
+                          }>
+                            {match.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-medium">Location</p>
+                            <p className="text-sm text-muted-foreground">{match.location}</p>
+                          </div>
+                          {match.status === 'COMPLETED' && (
+                            <div>
+                              <p className="text-sm font-medium">Score</p>
+                              <p className="text-sm text-muted-foreground">
+                                {match.scoreA} - {match.scoreB}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

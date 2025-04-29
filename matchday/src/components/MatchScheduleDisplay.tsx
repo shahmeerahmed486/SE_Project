@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { db } from '@/src/firebase/config';
-import { Match, MatchSchedule, PointsTable, Team } from '@/src/types';
-import { updateMatchResult } from '@/src/services/matchService';
+import { Match, MatchSchedule, PointsTable, Team, UserRole } from '@/src/types';
+import { updateMatchResult, updateMatchDetails } from '@/src/services/matchService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/src/contexts/AuthContext';
 
 interface MatchScheduleDisplayProps {
     tournamentId: string;
@@ -16,11 +17,21 @@ interface MatchScheduleDisplayProps {
 
 export function MatchScheduleDisplay({ tournamentId, format }: MatchScheduleDisplayProps) {
     const [schedule, setSchedule] = useState<MatchSchedule | null>(null);
+    const [matches, setMatches] = useState<Record<string, Match>>({});
     const [pointsTable, setPointsTable] = useState<PointsTable | null>(null);
     const [teams, setTeams] = useState<Record<string, Team>>({});
     const [scores, setScores] = useState<Record<string, { home: string; away: string }>>({});
     const [isUpdating, setIsUpdating] = useState<Record<string, boolean>>({});
+    const [editingMatch, setEditingMatch] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<{
+        date: string;
+        time: string;
+        location: string;
+    }>({ date: '', time: '', location: '' });
     const { toast } = useToast();
+    const { user } = useAuth();
+
+    const isManagement = user?.role === UserRole.MANAGEMENT;
 
     useEffect(() => {
         // Subscribe to match schedule updates
@@ -36,6 +47,26 @@ export function MatchScheduleDisplay({ tournamentId, format }: MatchScheduleDisp
                 toast({
                     title: 'Error',
                     description: 'Failed to load match schedule.',
+                    variant: 'destructive',
+                });
+            }
+        );
+
+        // Subscribe to matches updates
+        const matchesUnsubscribe = onSnapshot(
+            collection(db, 'matches'),
+            (snapshot) => {
+                const matchesData: Record<string, Match> = {};
+                snapshot.forEach((doc) => {
+                    matchesData[doc.id] = doc.data() as Match;
+                });
+                setMatches(matchesData);
+            },
+            (error) => {
+                console.error('Error listening to matches:', error);
+                toast({
+                    title: 'Error',
+                    description: 'Failed to load matches.',
                     variant: 'destructive',
                 });
             }
@@ -64,6 +95,7 @@ export function MatchScheduleDisplay({ tournamentId, format }: MatchScheduleDisp
 
         return () => {
             scheduleUnsubscribe();
+            matchesUnsubscribe();
             pointsTableUnsubscribe();
         };
     }, [tournamentId, format, toast]);
@@ -116,6 +148,36 @@ export function MatchScheduleDisplay({ tournamentId, format }: MatchScheduleDisp
         }
     };
 
+    const handleEditMatch = (match: Match) => {
+        setEditingMatch(match.id);
+        setEditForm({
+            date: match.date,
+            time: match.time,
+            location: match.location
+        });
+    };
+
+    const handleUpdateMatchDetails = async (match: Match) => {
+        try {
+            setIsUpdating((prev) => ({ ...prev, [match.id]: true }));
+            await updateMatchDetails(match.id, editForm);
+            toast({
+                title: 'Success',
+                description: 'Match details have been updated.',
+            });
+            setEditingMatch(null);
+        } catch (error) {
+            console.error('Error updating match details:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to update match details.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsUpdating((prev) => ({ ...prev, [match.id]: false }));
+        }
+    };
+
     if (!schedule) {
         return (
             <Card>
@@ -141,55 +203,120 @@ export function MatchScheduleDisplay({ tournamentId, format }: MatchScheduleDisp
                             <TableRow>
                                 <TableHead>Home Team</TableHead>
                                 <TableHead>Away Team</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Location</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Score</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {schedule.matches.map((match) => (
-                                <TableRow key={match.id}>
-                                    <TableCell>{teams[match.homeTeamId]?.name || match.homeTeamId}</TableCell>
-                                    <TableCell>{teams[match.awayTeamId]?.name || match.awayTeamId}</TableCell>
-                                    <TableCell>{match.status}</TableCell>
-                                    <TableCell>
-                                        {match.status === 'COMPLETED' ? (
-                                            `${match.homeTeamScore} - ${match.awayTeamScore}`
-                                        ) : (
-                                            <div className="flex items-center space-x-2">
+                            {schedule.matches.map((matchId) => {
+                                const match = matches[matchId];
+                                if (!match) return null;
+
+                                return (
+                                    <TableRow key={match.id}>
+                                        <TableCell>{teams[match.teamA]?.name || match.teamA}</TableCell>
+                                        <TableCell>{teams[match.teamB]?.name || match.teamB}</TableCell>
+                                        <TableCell>
+                                            {editingMatch === match.id ? (
                                                 <Input
-                                                    type="number"
-                                                    min="0"
-                                                    placeholder="Home"
-                                                    className="w-20"
-                                                    value={scores[match.id]?.home || ''}
-                                                    onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)}
+                                                    type="date"
+                                                    value={editForm.date}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, date: e.target.value }))}
                                                 />
-                                                <span>-</span>
+                                            ) : (
+                                                match.date || '-'
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {editingMatch === match.id ? (
                                                 <Input
-                                                    type="number"
-                                                    min="0"
-                                                    placeholder="Away"
-                                                    className="w-20"
-                                                    value={scores[match.id]?.away || ''}
-                                                    onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)}
+                                                    type="time"
+                                                    value={editForm.time}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, time: e.target.value }))}
                                                 />
+                                            ) : (
+                                                match.time || '-'
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {editingMatch === match.id ? (
+                                                <Input
+                                                    value={editForm.location}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))}
+                                                    placeholder="Enter location"
+                                                />
+                                            ) : (
+                                                match.location || '-'
+                                            )}
+                                        </TableCell>
+                                        <TableCell>{match.status}</TableCell>
+                                        <TableCell>
+                                            {match.status === 'COMPLETED' ? (
+                                                `${match.scoreA} - ${match.scoreB}`
+                                            ) : (
+                                                <div className="flex items-center space-x-2">
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="Home"
+                                                        className="w-20"
+                                                        value={scores[match.id]?.home || ''}
+                                                        onChange={(e) => handleScoreChange(match.id, 'home', e.target.value)}
+                                                    />
+                                                    <span>-</span>
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        placeholder="Away"
+                                                        className="w-20"
+                                                        value={scores[match.id]?.away || ''}
+                                                        onChange={(e) => handleScoreChange(match.id, 'away', e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex space-x-2">
+                                                {match.status !== 'COMPLETED' && (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleUpdateScore(match)}
+                                                        disabled={isUpdating[match.id]}
+                                                    >
+                                                        {isUpdating[match.id] ? 'Updating...' : 'Update Score'}
+                                                    </Button>
+                                                )}
+                                                {isManagement && (
+                                                    <>
+                                                        {editingMatch === match.id ? (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleUpdateMatchDetails(match)}
+                                                                disabled={isUpdating[match.id]}
+                                                            >
+                                                                {isUpdating[match.id] ? 'Saving...' : 'Save'}
+                                                            </Button>
+                                                        ) : (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleEditMatch(match)}
+                                                            >
+                                                                Edit
+                                                            </Button>
+                                                        )}
+                                                    </>
+                                                )}
                                             </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        {match.status !== 'COMPLETED' && (
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleUpdateScore(match)}
-                                                disabled={isUpdating[match.id]}
-                                            >
-                                                {isUpdating[match.id] ? 'Updating...' : 'Update Score'}
-                                            </Button>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </CardContent>

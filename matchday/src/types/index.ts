@@ -13,8 +13,8 @@ export interface BaseUser {
     name?: string;
     role: UserRole;
     password: string; // Note: Potentially redundant for client-side use, as Firebase Auth manages passwords server-side
-    createdAt: Date; // Note: Using Date may cause mismatches with string-based timestamps in Firestore; consider string for consistency
-    updatedAt: Date; // Note: Same as above
+    createdAt: string;
+    updatedAt: string;
 }
 
 // Admin user type
@@ -61,13 +61,13 @@ export interface AuthUser {
 // }
 
 export interface Announcement {
-  id: string;
-  title: string;
-  message: string;
-  tournamentId?: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
+    id: string;
+    title: string;
+    message: string;
+    tournamentId?: string;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 export enum TournamentStatus {
@@ -106,25 +106,21 @@ export interface Team {
     name: string;
     tournamentId: string;
     captainId: string;
-    players: {
-        name: string;
-        position: string;
-        number: string;
-    }[];
-    eliminated: boolean; // Added from @/types for match scheduling
+    players: Player[];
+    eliminated: boolean;
     createdAt: string;
     updatedAt: string;
-    status: 'pending' | 'approved' | 'rejected' | 'eliminated'; // Added from @/types for team status
-    // Note: The players structure is redundant with @/types's Player interface, which includes id and teamId
+    status: 'pending' | 'approved' | 'rejected' | 'eliminated';
 }
 
 export interface Player {
     id: string;
     name: string;
+    position: string;
+    number: string;
     teamId: string;
     createdAt: string;
     updatedAt: string;
-    // Added from @/types to support structured player data
 }
 
 // Legacy Match interface (retained to avoid breaking existing components)

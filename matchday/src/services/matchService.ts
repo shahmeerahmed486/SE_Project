@@ -180,6 +180,10 @@ export const updateMatchResult = async (
         throw new Error('Match ID and Schedule ID are required');
     }
 
+    if (typeof scoreA !== 'number' || typeof scoreB !== 'number' || isNaN(scoreA) || isNaN(scoreB)) {
+        throw new Error('Invalid scores provided');
+    }
+
     try {
         // Get the match
         const matchDoc = await getDoc(doc(db, 'matches', matchId));
@@ -188,6 +192,11 @@ export const updateMatchResult = async (
         }
 
         const match = matchDoc.data() as Match;
+
+        // Validate match status
+        if (match.status === 'COMPLETED') {
+            throw new Error('Match is already completed');
+        }
 
         // Update match
         await updateDoc(doc(db, 'matches', matchId), {
@@ -220,33 +229,35 @@ export const updateMatchResult = async (
             const teamAEntry = pointsTable.entries.find(e => e.teamId === match.teamA);
             const teamBEntry = pointsTable.entries.find(e => e.teamId === match.teamB);
 
-            if (teamAEntry && teamBEntry) {
-                // Update stats
-                teamAEntry.matchesPlayed++;
-                teamBEntry.matchesPlayed++;
-                teamAEntry.goalsFor += scoreA;
-                teamAEntry.goalsAgainst += scoreB;
-                teamBEntry.goalsFor += scoreB;
-                teamBEntry.goalsAgainst += scoreA;
-
-                if (scoreA > scoreB) {
-                    teamAEntry.wins++;
-                    teamAEntry.points += 3;
-                    teamBEntry.losses++;
-                } else if (scoreB > scoreA) {
-                    teamBEntry.wins++;
-                    teamBEntry.points += 3;
-                    teamAEntry.losses++;
-                } else {
-                    teamAEntry.draws++;
-                    teamBEntry.draws++;
-                    teamAEntry.points++;
-                    teamBEntry.points++;
-                }
-
-                teamAEntry.goalDifference = teamAEntry.goalsFor - teamAEntry.goalsAgainst;
-                teamBEntry.goalDifference = teamBEntry.goalsFor - teamBEntry.goalsAgainst;
+            if (!teamAEntry || !teamBEntry) {
+                throw new Error('Team entries not found in points table');
             }
+
+            // Update stats
+            teamAEntry.matchesPlayed++;
+            teamBEntry.matchesPlayed++;
+            teamAEntry.goalsFor += scoreA;
+            teamAEntry.goalsAgainst += scoreB;
+            teamBEntry.goalsFor += scoreB;
+            teamBEntry.goalsAgainst += scoreA;
+
+            if (scoreA > scoreB) {
+                teamAEntry.wins++;
+                teamAEntry.points += 3;
+                teamBEntry.losses++;
+            } else if (scoreB > scoreA) {
+                teamBEntry.wins++;
+                teamBEntry.points += 3;
+                teamAEntry.losses++;
+            } else {
+                teamAEntry.draws++;
+                teamBEntry.draws++;
+                teamAEntry.points++;
+                teamBEntry.points++;
+            }
+
+            teamAEntry.goalDifference = teamAEntry.goalsFor - teamAEntry.goalsAgainst;
+            teamBEntry.goalDifference = teamBEntry.goalsFor - teamBEntry.goalsAgainst;
 
             await updateDoc(doc(db, 'pointsTables', pointsTable.id), {
                 entries: pointsTable.entries,
@@ -257,4 +268,74 @@ export const updateMatchResult = async (
         console.error('Error updating match result:', error);
         throw error;
     }
-}; 
+};
+
+// Get matches for a tournament
+export const getMatchesByTournament = async (tournamentId: string): Promise<Match[]> => {
+    if (!tournamentId) {
+        throw new Error('Tournament ID is required');
+    }
+
+    try {
+        // Get the match schedule
+        const scheduleDoc = await getDoc(doc(db, 'matchSchedules', `schedule-${tournamentId}`));
+        if (!scheduleDoc.exists()) {
+            return []; // Return empty array if no schedule exists
+        }
+
+        const schedule = scheduleDoc.data() as MatchSchedule;
+
+        // Fetch all matches in parallel
+        const matchPromises = schedule.matches.map(matchId =>
+            getDoc(doc(db, 'matches', matchId))
+        );
+
+        const matchDocs = await Promise.all(matchPromises);
+
+        return matchDocs
+            .filter(doc => doc.exists())
+            .map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Match[];
+    } catch (error) {
+        console.error('Error fetching matches:', error);
+        throw error;
+    }
+};
+
+// Update match details
+export const updateMatchDetails = async (
+    matchId: string,
+    details: {
+        date?: string;
+        time?: string;
+        location?: string;
+        status?: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED';
+    }
+): Promise<void> => {
+    if (!matchId) {
+        throw new Error('Match ID is required');
+    }
+
+    try {
+        const matchDoc = await getDoc(doc(db, 'matches', matchId));
+        if (!matchDoc.exists()) {
+            throw new Error('Match not found');
+        }
+
+        await updateDoc(doc(db, 'matches', matchId), {
+            ...details,
+            updatedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error updating match details:', error);
+        throw error;
+    }
+};
+
+export class MatchService {
+    // ... existing code ...
+}
+
+export const matchService = new MatchService(); 

@@ -1,5 +1,5 @@
 import { User, UserRole } from '@/src/types'
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore"
+import { doc, getDoc, setDoc, collection, query, where, getDocs, Firestore } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import Cookies from 'js-cookie'
 
@@ -18,9 +18,15 @@ export interface UserCreate {
 }
 
 export class AuthService {
+    private static db: Firestore
+
+    static initialize(dbInstance: Firestore) {
+        this.db = dbInstance
+    }
+
     static async initializeAdmin(): Promise<void> {
         try {
-            const usersRef = collection(db, 'users')
+            const usersRef = collection(this.db, 'users')
             const q = query(usersRef, where('email', '==', DEFAULT_ADMIN.email))
             const querySnapshot = await getDocs(q)
 
@@ -34,12 +40,12 @@ export class AuthService {
                 username: DEFAULT_ADMIN.username,
                 role: UserRole.ADMIN,
                 password: DEFAULT_ADMIN.password,
-                createdAt: new Date(),
-                updatedAt: new Date()
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             }
 
             // Store admin in Firestore with plain password
-            await setDoc(doc(db, 'users', admin.id), {
+            await setDoc(doc(this.db, 'users', admin.id), {
                 ...admin,
                 password: DEFAULT_ADMIN.password
             })
@@ -53,7 +59,7 @@ export class AuthService {
     static async signup(userData: UserCreate): Promise<{ user: User; token: string }> {
         try {
             // Check if user already exists
-            const usersRef = collection(db, 'users')
+            const usersRef = collection(this.db, 'users')
             const q = query(usersRef, where('email', '==', userData.email))
             const querySnapshot = await getDocs(q)
 
@@ -68,8 +74,8 @@ export class AuthService {
                 role: userData.role || UserRole.CAPTAIN,
                 phone: userData.phone || '',
                 password: userData.password,
-                createdAt: new Date(),
-                updatedAt: new Date()
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             }
 
             const user: User = baseUser.role === UserRole.CAPTAIN
@@ -79,7 +85,7 @@ export class AuthService {
                     : { ...baseUser, role: UserRole.ADMIN }
 
             // Store user in Firestore with plain password
-            await setDoc(doc(db, 'users', user.id), {
+            await setDoc(doc(this.db, 'users', user.id), {
                 ...user,
                 password: userData.password
             })
@@ -98,7 +104,7 @@ export class AuthService {
             if (email === DEFAULT_ADMIN.email && password === DEFAULT_ADMIN.password) {
                 await this.initializeAdmin()
 
-                const usersRef = collection(db, 'users')
+                const usersRef = collection(this.db, 'users')
                 const q = query(usersRef, where('email', '==', DEFAULT_ADMIN.email))
                 const querySnapshot = await getDocs(q)
 
@@ -113,7 +119,7 @@ export class AuthService {
             }
 
             // Check other users
-            const usersRef = collection(db, 'users')
+            const usersRef = collection(this.db, 'users')
             const q = query(usersRef, where('email', '==', email))
             const querySnapshot = await getDocs(q)
 
@@ -146,7 +152,7 @@ export class AuthService {
     static async validateToken(token: string): Promise<User> {
         try {
             const [userId] = token.split('.')
-            const userDoc = await getDoc(doc(db, 'users', userId))
+            const userDoc = await getDoc(doc(this.db, 'users', userId))
 
             if (!userDoc.exists()) {
                 throw new Error('Invalid token')
@@ -161,7 +167,7 @@ export class AuthService {
     }
 
     static async validateUserRole(userId: string, allowedRoles: UserRole[]): Promise<User> {
-        const userDoc = await getDoc(doc(db, "users", userId))
+        const userDoc = await getDoc(doc(this.db, "users", userId))
         if (!userDoc.exists()) {
             throw new Error("User not found")
         }
