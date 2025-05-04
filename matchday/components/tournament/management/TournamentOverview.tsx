@@ -1,22 +1,402 @@
 "use client"
 
-import { useState } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { doc, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/src/firebase/config';
-import { Tournament, TournamentStatus, TournamentFormat } from '@/src/types';
+import { Tournament, TournamentStatus, TournamentFormat, Match, Team } from '@/src/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { Spinner } from '@/components/ui/spinner';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface TournamentOverviewProps {
   tournament: Tournament;
   updateTournament: (data: Partial<Tournament>) => void;
+}
+
+interface MatchManagementProps {
+  tournamentId: string;
+}
+
+function MatchManagement({ tournamentId }: MatchManagementProps) {
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isAddingMatch, setIsAddingMatch] = useState(false);
+  const [newMatch, setNewMatch] = useState<Partial<Match>>({
+    tournamentId,
+    teamA: '',
+    teamB: '',
+    date: '',
+    time: '',
+    location: '',
+    status: 'SCHEDULED',
+    scoreA: null,
+    scoreB: null,
+  });
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchMatches();
+    fetchTeams();
+  }, [tournamentId]);
+
+  const fetchMatches = async () => {
+    try {
+      const matchesQuery = query(
+        collection(db, 'matches'),
+        where('tournamentId', '==', tournamentId)
+      );
+      const matchesSnapshot = await getDocs(matchesQuery);
+      const matchesData = matchesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Match));
+      setMatches(matchesData);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load matches',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const teamsQuery = query(
+        collection(db, 'teams'),
+        where('tournamentId', '==', tournamentId)
+      );
+      const teamsSnapshot = await getDocs(teamsQuery);
+      const teamsData = teamsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Team));
+      setTeams(teamsData);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    }
+  };
+
+  const handleAddMatch = async () => {
+    try {
+      const matchRef = await addDoc(collection(db, 'matches'), {
+        ...newMatch,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setMatches([...matches, { id: matchRef.id, ...newMatch } as Match]);
+      setIsAddingMatch(false);
+      setNewMatch({
+        tournamentId,
+        teamA: '',
+        teamB: '',
+        date: '',
+        time: '',
+        location: '',
+        status: 'SCHEDULED',
+        scoreA: null,
+        scoreB: null,
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'Match added successfully',
+      });
+    } catch (error) {
+      console.error('Error adding match:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add match',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUpdateMatch = async (matchId: string, updates: Partial<Match>) => {
+    try {
+      const matchRef = doc(db, 'matches', matchId);
+      await updateDoc(matchRef, {
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setMatches(matches.map(match => 
+        match.id === matchId ? { ...match, ...updates } : match
+      ));
+      
+      toast({
+        title: 'Success',
+        description: 'Match updated successfully',
+      });
+    } catch (error) {
+      console.error('Error updating match:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update match',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteMatch = async (matchId: string) => {
+    try {
+      await deleteDoc(doc(db, 'matches', matchId));
+      setMatches(matches.filter(match => match.id !== matchId));
+      toast({
+        title: 'Success',
+        description: 'Match deleted successfully',
+      });
+    } catch (error) {
+      console.error('Error deleting match:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete match',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const getMatchWinner = (match: Match) => {
+    if (match.status !== 'COMPLETED' || match.scoreA === null || match.scoreB === null) {
+      return 'TBD';
+    }
+    if (match.scoreA === match.scoreB) {
+      return 'Tie';
+    }
+    return match.scoreA > match.scoreB 
+      ? teams.find(t => t.id === match.teamA)?.name 
+      : teams.find(t => t.id === match.teamB)?.name;
+  };
+
+  const handleScoreChange = async (matchId: string, team: 'A' | 'B', value: string) => {
+    const score = value === '' ? null : parseInt(value);
+    const field = team === 'A' ? 'scoreA' : 'scoreB';
+    
+    try {
+      await handleUpdateMatch(matchId, { [field]: score });
+    } catch (error) {
+      console.error(`Error updating score:`, error);
+    }
+  };
+
+  const handleInlineUpdate = async (matchId: string, field: string, value: string) => {
+    try {
+      await handleUpdateMatch(matchId, { [field]: value });
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+    }
+  };
+
+  if (loading) {
+    return <Spinner />;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-center">
+          <CardTitle>Match Management</CardTitle>
+          <Dialog open={isAddingMatch} onOpenChange={setIsAddingMatch}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Match
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Match</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Team A</label>
+                    <Select
+                      value={newMatch.teamA}
+                      onValueChange={(value) => setNewMatch({ ...newMatch, teamA: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Team B</label>
+                    <Select
+                      value={newMatch.teamB}
+                      onValueChange={(value) => setNewMatch({ ...newMatch, teamB: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date</label>
+                    <Input
+                      type="date"
+                      value={newMatch.date}
+                      onChange={(e) => setNewMatch({ ...newMatch, date: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Time</label>
+                    <Input
+                      type="time"
+                      value={newMatch.time}
+                      onChange={(e) => setNewMatch({ ...newMatch, time: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Location</label>
+                  <Input
+                    value={newMatch.location}
+                    onChange={(e) => setNewMatch({ ...newMatch, location: e.target.value })}
+                  />
+                </div>
+                <Button onClick={handleAddMatch} className="w-full">
+                  Add Match
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Teams</TableHead>
+              <TableHead>Date & Time</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Score</TableHead>
+              <TableHead>Winner</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {matches.map((match) => {
+              const teamA = teams.find(t => t.id === match.teamA);
+              const teamB = teams.find(t => t.id === match.teamB);
+              const winner = getMatchWinner(match);
+              return (
+                <TableRow key={match.id}>
+                  <TableCell>
+                    {teamA?.name || 'TBD'} vs {teamB?.name || 'TBD'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-2">
+                      <span>{format(new Date(match.date), 'MMM dd, yyyy')}</span>
+                      <Input
+                        type="time"
+                        className="w-[120px]"
+                        value={match.time}
+                        onChange={(e) => handleInlineUpdate(match.id, 'time', e.target.value)}
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={match.location}
+                      onChange={(e) => handleInlineUpdate(match.id, 'location', e.target.value)}
+                      className="w-[200px]"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={match.status}
+                      onValueChange={(value) => handleUpdateMatch(match.id, { status: value as 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' })}
+                    >
+                      <SelectTrigger className="w-[130px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SCHEDULED">Scheduled</SelectItem>
+                        <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                        <SelectItem value="COMPLETED">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-center gap-1">
+                      <Input
+                        type="number"
+                        className="w-12 text-center"
+                        placeholder="__"
+                        value={match.scoreA ?? ''}
+                        onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
+                        min={0}
+                        disabled={match.status !== 'COMPLETED'}
+                      />
+                      <span className="font-medium text-muted-foreground">:</span>
+                      <Input
+                        type="number"
+                        className="w-12 text-center"
+                        placeholder="__"
+                        value={match.scoreB ?? ''}
+                        onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
+                        min={0}
+                        disabled={match.status !== 'COMPLETED'}
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`font-medium ${
+                      winner === 'TBD' ? 'text-muted-foreground' :
+                      winner === 'Tie' ? 'text-yellow-600' :
+                      'text-primary'
+                    }`}>
+                      {winner}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteMatch(match.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function TournamentOverview({ tournament, updateTournament }: TournamentOverviewProps) {
@@ -193,6 +573,9 @@ export default function TournamentOverview({ tournament, updateTournament }: Tou
       <CardFooter>
         <Button onClick={toggleEdit}>Edit Details</Button>
       </CardFooter>
+      <div className="mt-6">
+        <MatchManagement tournamentId={tournament.id} />
+      </div>
     </>
   );
 

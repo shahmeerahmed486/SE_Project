@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState } from "react"
@@ -64,6 +63,18 @@ export default function TournamentDetailsPage() {
         // Fetch teams
         const teamsData = await TeamService.getTeamsByTournament(tournamentId)
         setTeams(teamsData)
+
+        // Fetch matches
+        const matchesQuery = query(
+          collection(db, "matches"),
+          where("tournamentId", "==", tournamentId)
+        )
+        const matchesSnapshot = await getDocs(matchesQuery)
+        const fetchedMatches: Match[] = matchesSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Match))
+        setMatches(fetchedMatches)
 
         // Fetch announcements
         const q = query(
@@ -368,22 +379,36 @@ export default function TournamentDetailsPage() {
                   <div>Status</div>
                 </div>
                 <div className="divide-y">
-                  {matches
-                    .filter((match) => match.status === "SCHEDULED")
-                    .map((match) => (
-                      <div key={match.id} className="grid grid-cols-5 items-center px-4 py-3">
-                        <div className="col-span-2 font-medium">
-                          {match.teamA} vs {match.teamB}
-                        </div>
-                        <div>
-                          {format(new Date(match.date), 'MMM dd, yyyy')} at {match.time}
-                        </div>
-                        <div>{match.location}</div>
-                        <div>
-                          <Badge variant="secondary">Upcoming</Badge>
-                        </div>
-                      </div>
-                    ))}
+                  {loading ? (
+                    <div className="px-4 py-3 text-center text-muted-foreground">
+                      Loading matches...
+                    </div>
+                  ) : matches.filter((match) => match.status === "SCHEDULED").length === 0 ? (
+                    <div className="px-4 py-3 text-center text-muted-foreground">
+                      No upcoming matches scheduled
+                    </div>
+                  ) : (
+                    matches
+                      .filter((match) => match.status === "SCHEDULED")
+                      .map((match) => {
+                        const teamA = teams.find(t => t.id === match.teamA)
+                        const teamB = teams.find(t => t.id === match.teamB)
+                        return (
+                          <div key={match.id} className="grid grid-cols-5 items-center px-4 py-3">
+                            <div className="col-span-2 font-medium">
+                              {teamA?.name || 'TBD'} vs {teamB?.name || 'TBD'}
+                            </div>
+                            <div>
+                              {format(new Date(match.date), 'MMM dd, yyyy')} at {match.time}
+                            </div>
+                            <div>{match.location}</div>
+                            <div>
+                              <Badge variant="secondary">Upcoming</Badge>
+                            </div>
+                          </div>
+                        )
+                      })
+                  )}
                 </div>
               </div>
 
@@ -395,20 +420,34 @@ export default function TournamentDetailsPage() {
                   <div>Location</div>
                 </div>
                 <div className="divide-y">
-                  {matches
-                    .filter((match) => match.status === "COMPLETED")
-                    .map((match) => (
-                      <div key={match.id} className="grid grid-cols-5 items-center px-4 py-3">
-                        <div className="col-span-2 font-medium">
-                          {match.teamA} vs {match.teamB}
-                        </div>
-                        <div className="font-bold">
-                          {match.scoreA} - {match.scoreB}
-                        </div>
-                        <div>{format(new Date(match.date), 'MMM dd, yyyy')}</div>
-                        <div>{match.location}</div>
-                      </div>
-                    ))}
+                  {loading ? (
+                    <div className="px-4 py-3 text-center text-muted-foreground">
+                      Loading matches...
+                    </div>
+                  ) : matches.filter((match) => match.status === "COMPLETED").length === 0 ? (
+                    <div className="px-4 py-3 text-center text-muted-foreground">
+                      No completed matches
+                    </div>
+                  ) : (
+                    matches
+                      .filter((match) => match.status === "COMPLETED")
+                      .map((match) => {
+                        const teamA = teams.find(t => t.id === match.teamA)
+                        const teamB = teams.find(t => t.id === match.teamB)
+                        return (
+                          <div key={match.id} className="grid grid-cols-5 items-center px-4 py-3">
+                            <div className="col-span-2 font-medium">
+                              {teamA?.name || 'TBD'} vs {teamB?.name || 'TBD'}
+                            </div>
+                            <div className="font-bold">
+                              {match.scoreA} - {match.scoreB}
+                            </div>
+                            <div>{format(new Date(match.date), 'MMM dd, yyyy')}</div>
+                            <div>{match.location}</div>
+                          </div>
+                        )
+                      })
+                  )}
                 </div>
               </div>
             </TabsContent>
