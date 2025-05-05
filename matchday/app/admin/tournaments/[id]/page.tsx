@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { Tournament, TournamentFormat, TournamentStatus, Announcement } from "@/src/types";
 import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, getDocs, addDoc, updateDoc as updateDocFirestore, deleteDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from '@/src/firebase/config'
 import { Plus, Pencil, Trash2, ChevronDown, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { use } from "react";

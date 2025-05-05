@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 import { Tournament, User, UserRole, Announcement, TournamentStatus, ManagementUser,TournamentFormat } from "@/src/types"
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, arrayRemove, addDoc, deleteDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { db } from '@/src/firebase/config'
 import { AuthService } from "@/src/api/services/AuthService"
 import { Plus, Users, Trophy, Settings, ArrowRight, Calendar, MapPin, Check, X, Pencil, Trash2, Megaphone, ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"

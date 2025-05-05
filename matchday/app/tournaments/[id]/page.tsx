@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Users, MapPin, ArrowLeft, Trophy, Clock } from "lucide-react"
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { db } from '@/src/firebase/config'
 import TeamRegistrationForm from '@/components/tournament/TeamRegistrationForm'
 import {
   Dialog,
