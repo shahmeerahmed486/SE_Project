@@ -125,6 +125,84 @@ function MatchManagement({ tournamentId }: MatchManagementProps) {
     }
   };
 
+  const getMatchWinner = (match: Match) => {
+    if (match.status !== 'COMPLETED' || match.scoreA === null || match.scoreB === null) {
+      return 'TBD';
+    }
+    if (match.scoreA === match.scoreB) {
+      return 'Tie';
+    }
+    return match.scoreA > match.scoreB 
+      ? teams.find(t => t.id === match.teamA)?.name 
+      : teams.find(t => t.id === match.teamB)?.name;
+  };
+
+  const getWinningTeamId = (match: Match): string | null => {
+    if (match.status !== 'COMPLETED' || match.scoreA === null || match.scoreB === null) {
+      return null;
+    }
+    if (match.scoreA === match.scoreB) {
+      return null; // No winner in case of a tie
+    }
+    return match.scoreA > match.scoreB ? match.teamA : match.teamB;
+  };
+
+  const updateDependentMatches = async (completedMatch: Match) => {
+    const winningTeamId = getWinningTeamId(completedMatch);
+    if (!winningTeamId) return; // No winner to propagate
+
+    // Find all matches that have TBD teams
+    const tbdMatches = matches.filter(match => 
+      match.teamA === 'TBD' || match.teamB === 'TBD'
+    );
+
+    // Update each TBD match that depends on this completed match
+    for (const tbdMatch of tbdMatches) {
+      let updates: Partial<Match> = {};
+
+      // Check if this TBD match should be updated based on the completed match
+      if (tbdMatch.teamA === 'TBD') {
+        updates.teamA = winningTeamId;
+      } else if (tbdMatch.teamB === 'TBD') {
+        updates.teamB = winningTeamId;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        try {
+          await handleUpdateMatch(tbdMatch.id, updates);
+          toast({
+            title: "Match Updated",
+            description: "Dependent match has been updated with the winning team.",
+          });
+        } catch (error) {
+          console.error('Error updating dependent match:', error);
+          toast({
+            title: "Error",
+            description: "Failed to update dependent match.",
+            variant: "destructive",
+          });
+        }
+      }
+    }
+  };
+
+  const handleScoreChange = async (matchId: string, team: 'A' | 'B', value: string) => {
+    const score = value === '' ? null : parseInt(value);
+    const field = team === 'A' ? 'scoreA' : 'scoreB';
+    
+    try {
+      await handleUpdateMatch(matchId, { [field]: score });
+      
+      // If both scores are now set, check for dependent matches
+      const match = matches.find(m => m.id === matchId);
+      if (match && match.scoreA !== null && match.scoreB !== null) {
+        await updateDependentMatches(match);
+      }
+    } catch (error) {
+      console.error(`Error updating score:`, error);
+    }
+  };
+
   const handleUpdateMatch = async (matchId: string, updates: Partial<Match>) => {
     try {
       const matchRef = doc(db, 'matches', matchId);
@@ -133,9 +211,17 @@ function MatchManagement({ tournamentId }: MatchManagementProps) {
         updatedAt: new Date().toISOString(),
       });
       
+      // Update local state
       setMatches(matches.map(match => 
         match.id === matchId ? { ...match, ...updates } : match
       ));
+
+      // If this was a score update that completed the match, update dependent matches
+      const updatedMatch = { ...matches.find(m => m.id === matchId)!, ...updates };
+      if (updates.status === 'COMPLETED' || 
+          (updates.scoreA !== undefined && updates.scoreB !== undefined)) {
+        await updateDependentMatches(updatedMatch);
+      }
       
       toast({
         title: 'Success',
@@ -166,29 +252,6 @@ function MatchManagement({ tournamentId }: MatchManagementProps) {
         description: 'Failed to delete match',
         variant: 'destructive',
       });
-    }
-  };
-
-  const getMatchWinner = (match: Match) => {
-    if (match.status !== 'COMPLETED' || match.scoreA === null || match.scoreB === null) {
-      return 'TBD';
-    }
-    if (match.scoreA === match.scoreB) {
-      return 'Tie';
-    }
-    return match.scoreA > match.scoreB 
-      ? teams.find(t => t.id === match.teamA)?.name 
-      : teams.find(t => t.id === match.teamB)?.name;
-  };
-
-  const handleScoreChange = async (matchId: string, team: 'A' | 'B', value: string) => {
-    const score = value === '' ? null : parseInt(value);
-    const field = team === 'A' ? 'scoreA' : 'scoreB';
-    
-    try {
-      await handleUpdateMatch(matchId, { [field]: score });
-    } catch (error) {
-      console.error(`Error updating score:`, error);
     }
   };
 
